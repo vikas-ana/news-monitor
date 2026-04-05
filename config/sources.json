@@ -1,5 +1,5 @@
 {
-  "_comment": "All sources are FREE - Google News RSS + FDA + EMA + Merck",
+  "_comment": "All sources FREE. Indication feeds = broad (catch any asset). Direct RSS = keyword filtered.",
   "keywords": {
     "indications": [
       "rheumatoid arthritis", "plaque psoriasis", "psoriasis",
@@ -26,74 +26,80 @@
     ]
   },
   "sources": {
-    "google_news_rss": [
-      {
-        "name": "RA News (Google)",
-        "url": "https://news.google.com/rss/search?q=rheumatoid+arthritis+drug+trial+approval&hl=en-US&gl=US&ceid=US:en",
-        "indication": "RA"
-      },
-      {
-        "name": "Psoriasis News (Google)",
-        "url": "https://news.google.com/rss/search?q=plaque+psoriasis+drug+FDA+EMA+trial&hl=en-US&gl=US&ceid=US:en",
-        "indication": "Psoriasis"
-      },
-      {
-        "name": "Crohns Disease News (Google)",
-        "url": "https://news.google.com/rss/search?q=Crohns+disease+drug+trial+approval&hl=en-US&gl=US&ceid=US:en",
-        "indication": "Crohns"
-      },
-      {
-        "name": "Ulcerative Colitis News (Google)",
-        "url": "https://news.google.com/rss/search?q=ulcerative+colitis+drug+trial+approval&hl=en-US&gl=US&ceid=US:en",
-        "indication": "UC"
-      },
-      {
-        "name": "AbbVie Pipeline News (Google)",
-        "url": "https://news.google.com/rss/search?q=AbbVie+Rinvoq+OR+Skyrizi+OR+Humira&hl=en-US&gl=US&ceid=US:en",
-        "indication": "all"
-      },
-      {
-        "name": "J&J Janssen Pipeline News (Google)",
-        "url": "https://news.google.com/rss/search?q=Janssen+Stelara+OR+Tremfya+OR+Simponi&hl=en-US&gl=US&ceid=US:en",
-        "indication": "all"
-      },
-      {
-        "name": "Eli Lilly Pipeline News (Google)",
-        "url": "https://news.google.com/rss/search?q=Lilly+Taltz+OR+Olumiant+OR+Omvoh&hl=en-US&gl=US&ceid=US:en",
-        "indication": "all"
-      },
-      {
-        "name": "Takeda Entyvio News (Google)",
-        "url": "https://news.google.com/rss/search?q=Takeda+Entyvio+vedolizumab&hl=en-US&gl=US&ceid=US:en",
-        "indication": "all"
-      },
-      {
-        "name": "Anti-TL1A Pipeline (Google)",
-        "url": "https://news.google.com/rss/search?q=Tulisokibart+OR+Duvakitug+OR+TL1A+immunology&hl=en-US&gl=US&ceid=US:en",
-        "indication": "all"
-      },
-      {
-        "name": "FDA Immunology Approvals (Google)",
-        "url": "https://news.google.com/rss/search?q=FDA+approval+immunology+arthritis+psoriasis+colitis&hl=en-US&gl=US&ceid=US:en",
-        "indication": "all"
-      }
-    ],
-    "direct_rss": [
-      {
-        "name": "FDA Press Releases",
-        "url": "https://www.fda.gov/about-fda/contact-fda/stay-informed/rss-feeds/press-releases/rss.xml",
-        "type": "regulatory"
-      },
-      {
-        "name": "EMA News",
-        "url": "https://www.ema.europa.eu/en/news.xml",
-        "type": "regulatory"
-      },
-      {
-        "name": "Merck News",
-        "url": "https://www.merck.com/feed/",
-        "type": "company"
-      }
-    ]
+    "indication_rss": {
+      "_comment": "These are pre-filtered by indication — ALL articles accepted, no keyword filter applied. Catches NEW/unknown assets.",
+      "feeds": [
+        {
+          "name": "Rheumatoid Arthritis — All News",
+          "indication": "RA",
+          "url": "https://news.google.com/rss/search?q=rheumatoid+arthritis+drug+OR+treatment+OR+trial+OR+approval+OR+FDA+OR+EMA&hl=en-US&gl=US&ceid=US:en"
+        },
+        {
+          "name": "Rheumatoid Arthritis — Phase 3 & Approvals",
+          "indication": "RA",
+          "url": "https://news.google.com/rss/search?q=%22rheumatoid+arthritis%22+%22phase+3%22+OR+%22FDA+approved%22+OR+%22new+indication%22&hl=en-US&gl=US&ceid=US:en"
+        },
+        {
+          "name": "Plaque Psoriasis — All News",
+          "indication": "Psoriasis",
+          "url": "https://news.google.com/rss/search?q=plaque+psoriasis+drug+OR+treatment+OR+trial+OR+approval+OR+FDA+OR+EMA&hl=en-US&gl=US&ceid=US:en"
+        },
+        {
+          "name": "Psoriasis — Phase 3 & Approvals",
+          "indication": "Psoriasis",
+          "url": "https://news.google.com/rss/search?q=%22psoriasis%22+%22phase+3%22+OR+%22FDA+approved%22+OR+%22new+indication%22&hl=en-US&gl=US&ceid=US:en"
+        },
+        {
+          "name": "Crohns Disease — All News",
+          "indication": "Crohns",
+          "url": "https://news.google.com/rss/search?q=%22Crohn%27s+disease%22+drug+OR+treatment+OR+trial+OR+approval+OR+FDA+OR+EMA&hl=en-US&gl=US&ceid=US:en"
+        },
+        {
+          "name": "Crohns Disease — Phase 3 & Approvals",
+          "indication": "Crohns",
+          "url": "https://news.google.com/rss/search?q=%22Crohn%27s+disease%22+%22phase+3%22+OR+%22FDA+approved%22+OR+%22new+indication%22&hl=en-US&gl=US&ceid=US:en"
+        },
+        {
+          "name": "Ulcerative Colitis — All News",
+          "indication": "UC",
+          "url": "https://news.google.com/rss/search?q=%22ulcerative+colitis%22+drug+OR+treatment+OR+trial+OR+approval+OR+FDA+OR+EMA&hl=en-US&gl=US&ceid=US:en"
+        },
+        {
+          "name": "Ulcerative Colitis — Phase 3 & Approvals",
+          "indication": "UC",
+          "url": "https://news.google.com/rss/search?q=%22ulcerative+colitis%22+%22phase+3%22+OR+%22FDA+approved%22+OR+%22new+indication%22&hl=en-US&gl=US&ceid=US:en"
+        },
+        {
+          "name": "Anti-TL1A Pipeline — Emerging Class",
+          "indication": "all",
+          "url": "https://news.google.com/rss/search?q=TL1A+OR+Tulisokibart+OR+Duvakitug+immunology&hl=en-US&gl=US&ceid=US:en"
+        },
+        {
+          "name": "Key Companies — Pipeline Updates",
+          "indication": "all",
+          "url": "https://news.google.com/rss/search?q=AbbVie+OR+Janssen+OR+Lilly+OR+Takeda+OR+Sanofi+immunology+OR+indication+OR+approval&hl=en-US&gl=US&ceid=US:en"
+        }
+      ]
+    },
+    "direct_rss": {
+      "_comment": "Keyword filter IS applied here to avoid noise.",
+      "feeds": [
+        {
+          "name": "FDA Press Releases",
+          "url": "https://www.fda.gov/about-fda/contact-fda/stay-informed/rss-feeds/press-releases/rss.xml",
+          "type": "regulatory"
+        },
+        {
+          "name": "EMA News",
+          "url": "https://www.ema.europa.eu/en/news.xml",
+          "type": "regulatory"
+        },
+        {
+          "name": "Merck News",
+          "url": "https://www.merck.com/feed/",
+          "type": "company"
+        }
+      ]
+    }
   }
 }
