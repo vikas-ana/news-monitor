@@ -2,8 +2,8 @@ name: News Monitor Fetcher
 
 on:
   schedule:
-    - cron: '0 */6 * * *'   # Every 6 hours
-  workflow_dispatch:          # Allow manual trigger
+    - cron: '0 */4 * * *'   # Every 4 hours: 00:00, 04:00, 08:00, 12:00, 16:00, 20:00 UTC
+  workflow_dispatch:          # Allow manual trigger anytime
 
 jobs:
   fetch-news:
@@ -24,7 +24,7 @@ jobs:
           git config user.name "News Monitor Bot"
           git config user.email "bot@news-monitor"
           git add output/results.json
-          git diff --staged --quiet || git commit -m "Update news results [$(date -u '+%Y-%m-%d %H:%M UTC')]"
+          git diff --staged --quiet || git commit -m "news: update results [$(date -u '+%Y-%m-%d %H:%M UTC')]"
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
