@@ -1,0 +1,83 @@
+Company,Brand Name,Generic Name,Indication,Mechanism of Action (MOA),Status,Approval Year
+AbbVie,Humira,adalimumab,RA,TNF-α inhibitor,Approved,2002
+AbbVie,Humira,adalimumab,Plaque Psoriasis,TNF-α inhibitor,Approved,2008
+AbbVie,Humira,adalimumab,PsA,TNF-α inhibitor,Approved,2005
+AbbVie,Humira,adalimumab,UC,TNF-α inhibitor,Approved,2012
+AbbVie,Humira,adalimumab,Crohn's Disease,TNF-α inhibitor,Approved,2007
+AbbVie,Skyrizi,risankizumab,Plaque Psoriasis,IL-23 inhibitor (anti-p19),Approved,2019
+AbbVie,Skyrizi,risankizumab,PsA,IL-23 inhibitor (anti-p19),Approved,2022
+AbbVie,Skyrizi,risankizumab,Crohn's Disease,IL-23 inhibitor (anti-p19),Approved,2022
+AbbVie,Skyrizi,risankizumab,UC,IL-23 inhibitor (anti-p19),Approved,2024
+AbbVie,Rinvoq,upadacitinib,RA,JAK1 inhibitor,Approved,2019
+AbbVie,Rinvoq,upadacitinib,PsA,JAK1 inhibitor,Approved,2021
+AbbVie,Rinvoq,upadacitinib,Plaque Psoriasis,JAK1 inhibitor,Approved,2022
+AbbVie,Rinvoq,upadacitinib,UC,JAK1 inhibitor,Approved,2022
+AbbVie,Rinvoq,upadacitinib,Crohn's Disease,JAK1 inhibitor,Approved,2023
+AbbVie,Rinvoq,upadacitinib,SLE (Lupus),JAK1 inhibitor,Phase 3,—
+J&J (Janssen),Stelara,ustekinumab,Plaque Psoriasis,IL-12/23 inhibitor,Approved,2009
+J&J (Janssen),Stelara,ustekinumab,PsA,IL-12/23 inhibitor,Approved,2013
+J&J (Janssen),Stelara,ustekinumab,Crohn's Disease,IL-12/23 inhibitor,Approved,2016
+J&J (Janssen),Stelara,ustekinumab,UC,IL-12/23 inhibitor,Approved,2019
+J&J (Janssen),Tremfya,guselkumab,Plaque Psoriasis,IL-23 inhibitor (anti-p19),Approved,2017
+J&J (Janssen),Tremfya,guselkumab,PsA,IL-23 inhibitor (anti-p19),Approved,2020
+J&J (Janssen),Simponi,golimumab,RA,TNF-α inhibitor,Approved,2009
+J&J (Janssen),Simponi,golimumab,PsA,TNF-α inhibitor,Approved,2009
+J&J (Janssen),Simponi,golimumab,UC,TNF-α inhibitor,Approved,2013
+J&J (Janssen),Nipocalimab,nipocalimab,SLE (Lupus),FcRn inhibitor,Phase 3,—
+Merck,Tulisokibart (MK-7240),tulisokibart,UC,Anti-TL1A monoclonal antibody,Phase 3,—
+Merck,Tulisokibart (MK-7240),tulisokibart,Crohn's Disease,Anti-TL1A monoclonal antibody,Phase 3,—
+Merck,Tulisokibart (MK-7240),tulisokibart,RA,Anti-TL1A monoclonal antibody,Phase 2,—
+AstraZeneca,Saphnelo,anifrolumab,SLE (Lupus),Type I IFN receptor (IFNAR1) inhibitor,Approved,2021
+AstraZeneca,Saphnelo SC,anifrolumab (SC),SLE (Lupus),Type I IFN receptor (IFNAR1) inhibitor,Phase 3,—
+Roche,Actemra / RoActemra,tocilizumab,RA,IL-6 receptor inhibitor,Approved,2010
+Roche,Rituxan / MabThera,rituximab,RA,Anti-CD20 (B-cell depleter),Approved,2006
+Novartis,Cosentyx,secukinumab,Plaque Psoriasis,IL-17A inhibitor,Approved,2015
+Novartis,Cosentyx,secukinumab,PsA,IL-17A inhibitor,Approved,2016
+Novartis,Ianalumab,ianalumab (VAY736),SLE (Lupus),BAFF-R inhibitor,Phase 3,—
+BMS,Orencia,abatacept,RA,CTLA4-Ig (CD80/86 co-stimulation inhibitor),Approved,2005
+BMS,Orencia,abatacept,PsA,CTLA4-Ig (CD80/86 co-stimulation inhibitor),Approved,2017
+BMS,Sotyktu,deucravacitinib,Plaque Psoriasis,TYK2 inhibitor,Approved,2022
+BMS,Sotyktu,deucravacitinib,PsA,TYK2 inhibitor,Approved,2026
+BMS,Zeposia,ozanimod,UC,S1P1/5 receptor modulator,Approved,2021
+BMS,Zeposia,ozanimod,Crohn's Disease,S1P1/5 receptor modulator,Phase 3,—
+BMS,Sotyktu,deucravacitinib,SLE (Lupus),TYK2 inhibitor,Phase 3,—
+Eli Lilly,Taltz,ixekizumab,Plaque Psoriasis,IL-17A inhibitor,Approved,2016
+Eli Lilly,Taltz,ixekizumab,PsA,IL-17A inhibitor,Approved,2017
+Eli Lilly,Olumiant,baricitinib,RA,JAK1/2 inhibitor,Approved,2018
+Eli Lilly,Olumiant,baricitinib,SLE (Lupus),JAK1/2 inhibitor,Approved,2022
+Eli Lilly,Omvoh,mirikizumab,UC,IL-23 inhibitor (anti-p19),Approved,2023
+Eli Lilly,Omvoh,mirikizumab,Crohn's Disease,IL-23 inhibitor (anti-p19),Approved,2025
+Sanofi,Kevzara,sarilumab,RA,IL-6 receptor inhibitor,Approved,2017
+Sanofi,Duvakitug,duvakitug,UC,Anti-TL1A monoclonal antibody,Phase 3,—
+Sanofi,Duvakitug,duvakitug,Crohn's Disease,Anti-TL1A monoclonal antibody,Phase 3,—
+Novo Nordisk,—,—,—,No approved drugs or significant pipeline in these 6 indications,N/A,—
+GSK,Benlysta,belimumab,SLE (Lupus),BAFF/BLyS inhibitor,Approved,2011
+GSK,Benlysta,belimumab,SLE (Lupus) — Lupus Nephritis,BAFF/BLyS inhibitor,Approved,2020
+Amgen,Enbrel,etanercept,RA,TNF-α inhibitor (fusion protein),Approved,1998
+Amgen,Enbrel,etanercept,PsA,TNF-α inhibitor (fusion protein),Approved,2002
+Amgen,Enbrel,etanercept,Plaque Psoriasis,TNF-α inhibitor (fusion protein),Approved,2004
+Amgen,Otezla,apremilast,Plaque Psoriasis,PDE4 inhibitor,Approved,2014
+Amgen,Otezla,apremilast,PsA,PDE4 inhibitor,Approved,2014
+Amgen,Amgevita,adalimumab-atto,RA / PsA / Plaque Psoriasis / UC / CD,TNF-α inhibitor (adalimumab biosimilar),Approved,2023
+Gilead,Jyseleca,filgotinib,RA,JAK1 inhibitor,Approved (EU/JP only),2020
+Gilead,Jyseleca,filgotinib,UC,JAK1 inhibitor,Approved (EU only),2021
+Takeda,Entyvio (IV),vedolizumab IV,UC,α4β7 integrin inhibitor,Approved,2014
+Takeda,Entyvio (IV),vedolizumab IV,Crohn's Disease,α4β7 integrin inhibitor,Approved,2014
+Takeda,Entyvio (SC),vedolizumab SC,UC,α4β7 integrin inhibitor (SC formulation),Approved,2023
+Takeda,Entyvio (SC),vedolizumab SC,Crohn's Disease,α4β7 integrin inhibitor (SC formulation),Approved,2024
+Boehringer Ingelheim,Spevigo,spesolimab,Plaque Psoriasis (GPP),IL-36 receptor inhibitor,Approved,2022
+Boehringer Ingelheim,Spesolimab,spesolimab,UC,IL-36 receptor inhibitor,Phase 2,—
+Bayer,—,—,—,No approved drugs or significant pipeline in these 6 indications,N/A,—
+Teva,Duvakitug,duvakitug,UC,Anti-TL1A monoclonal antibody (co-dev. with Sanofi),Phase 3,—
+Teva,Duvakitug,duvakitug,Crohn's Disease,Anti-TL1A monoclonal antibody (co-dev. with Sanofi),Phase 3,—
+Viatris,Hulio,adalimumab-fkjp,RA / PsA / Plaque Psoriasis / UC / CD,TNF-α inhibitor (adalimumab biosimilar),Approved,2023
+Viatris,Cenerimod,cenerimod,SLE (Lupus),S1P1 receptor modulator,Phase 3,—
+Regeneron,Kevzara,sarilumab,RA,IL-6 receptor inhibitor (co-dev. with Sanofi),Approved,2017
+CSL,—,—,—,No approved drugs or significant pipeline in these 6 indications,N/A,—
+Vertex,—,—,—,No approved drugs or significant pipeline in these 6 indications,N/A,—
+Astellas,Smyraf,peficitinib,RA,Pan-JAK inhibitor,Approved (Japan/Asia),2019
+Daiichi Sankyo,—,—,—,No approved drugs or significant pipeline in these 6 indications,N/A,—
+Sandoz,Hyrimoz,adalimumab-adaz,RA / PsA / Plaque Psoriasis / UC / CD,TNF-α inhibitor (adalimumab biosimilar),Approved,2023
+Sandoz,Erelzi,etanercept-szzs,RA / PsA / Plaque Psoriasis,TNF-α inhibitor (etanercept biosimilar),Approved,2016
+Sandoz,Zessly,infliximab biosimilar,RA / PsA / UC / CD,TNF-α inhibitor (infliximab biosimilar),Approved (EU),2018
+Sun Pharma,Ilumya,tildrakizumab,Plaque Psoriasis,IL-23 inhibitor (anti-p19),Approved,2018

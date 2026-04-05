@@ -1,0 +1,45 @@
+Green shading,Approved — drug has received regulatory approval
+Yellow shading,Phase 3 — pivotal trials underway or recently completed
+Orange shading,Phase 2 — mid-stage clinical development
+Grey shading,N/A — company has no meaningful presence in these indications
+INDICATION CODES,
+RA,Rheumatoid Arthritis
+PsA,Psoriatic Arthritis
+UC,Ulcerative Colitis
+CD,Crohn's Disease
+SLE,Systemic Lupus Erythematosus
+Plaque Psoriasis,Moderate-to-Severe Plaque Psoriasis
+KEY MOA ABBREVIATIONS,
+TNF-α inhibitor,Tumor Necrosis Factor-alpha inhibitor
+IL-23 inhibitor,Interleukin-23 inhibitor (typically anti-p19 subunit)
+IL-17A inhibitor,Interleukin-17A inhibitor
+IL-12/23 inhibitor,Interleukin-12/23 inhibitor (anti-p40 subunit)
+IL-6R inhibitor,Interleukin-6 receptor inhibitor
+JAK1 inhibitor,Janus Kinase 1 (selective) inhibitor
+JAK1/2 inhibitor,Janus Kinase 1 & 2 inhibitor
+Pan-JAK inhibitor,"Inhibitor of JAK1, JAK2, JAK3, and TYK2"
+TYK2 inhibitor,"Tyrosine Kinase 2 inhibitor (allosteric, pseudo-kinase domain)"
+PDE4 inhibitor,Phosphodiesterase-4 inhibitor
+BAFF/BLyS inhibitor,B-cell Activating Factor inhibitor
+BAFF-R inhibitor,BAFF Receptor inhibitor
+CTLA4-Ig,Cytotoxic T-lymphocyte Antigen 4 Ig fusion protein
+Anti-CD20,Anti-CD20 antibody (B-cell depleter)
+IFNAR1 inhibitor,Type I interferon receptor inhibitor
+FcRn inhibitor,Neonatal Fc receptor inhibitor
+α4β7 integrin inhibitor,Gut-selective integrin inhibitor
+S1P1 modulator,Sphingosine-1-phosphate receptor 1 modulator
+Anti-TL1A,Tumor Necrosis Factor-Like Cytokine 1A inhibitor
+IL-36R inhibitor,Interleukin-36 receptor inhibitor
+NOTES,
+Approval Year,US FDA approval year unless otherwise noted
+Gilead / Jyseleca,Filgotinib NOT approved by FDA for US; EU/Japan only
+Astellas / Smyraf,Peficitinib approved in Japan and select Asian markets only
+Sandoz / Erelzi,Approved 2016 but US commercial launch delayed due to patent litigation
+GPP note,Spesolimab (Spevigo) approved specifically for Generalized Pustular Psoriasis (GPP); Phase 2 data in plaque psoriasis and UC
+Duvakitug,Co-developed by Sanofi and Teva; Phase 3 program initiated 2025
+Nipocalimab,J&J Phase 3 FNHTR-001 trial in SLE/myasthenia gravis ongoing
+Ianalumab,Novartis Phase 3 SIRIUS trial in SLE ongoing
+Cenerimod,Viatris/Idorsia Phase 3 CARE trial in SLE ongoing
+Skyrizi UC,risankizumab for UC approved by FDA in June 2024
+Omvoh CD,mirikizumab for Crohn's Disease approved by FDA in January 2025
+Sotyktu PsA,deucravacitinib for PsA approved by FDA in March 2026
