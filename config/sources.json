@@ -1,47 +1,84 @@
 {
+  "_comment": "All sources are FREE - Google News RSS + FDA + EMA + Merck",
   "keywords": {
     "indications": [
-      "rheumatoid arthritis",
-      "RA",
-      "plaque psoriasis",
-      "psoriasis",
-      "psoriatic arthritis",
-      "PsA",
-      "Crohns disease",
-      "Crohn disease",
-      "ulcerative colitis",
-      "UC",
-      "inflammatory bowel disease",
-      "IBD"
+      "rheumatoid arthritis", "plaque psoriasis", "psoriasis",
+      "psoriatic arthritis", "Crohns disease", "Crohn disease",
+      "ulcerative colitis", "inflammatory bowel disease", "IBD"
     ],
     "drugs": [
-      "Humira", "adalimumab",
-      "Skyrizi", "risankizumab",
-      "Rinvoq", "upadacitinib",
-      "Stelara", "ustekinumab",
-      "Tremfya", "guselkumab",
-      "Simponi", "golimumab",
-      "Actemra", "tocilizumab",
-      "Cosentyx", "secukinumab",
-      "Orencia", "abatacept",
-      "Sotyktu", "deucravacitinib",
-      "Zeposia", "ozanimod",
-      "Taltz", "ixekizumab",
-      "Olumiant", "baricitinib",
-      "Omvoh", "mirikizumab",
-      "Kevzara", "sarilumab",
-      "Enbrel", "etanercept",
-      "Otezla", "apremilast",
-      "Entyvio", "vedolizumab",
-      "Jyseleca", "filgotinib",
-      "Tulisokibart", "MK-7240",
-      "Duvakitug",
-      "Spevigo", "spesolimab",
-      "Ilumya", "tildrakizumab"
+      "Humira", "adalimumab", "Skyrizi", "risankizumab",
+      "Rinvoq", "upadacitinib", "Stelara", "ustekinumab",
+      "Tremfya", "guselkumab", "Simponi", "golimumab",
+      "Actemra", "tocilizumab", "Cosentyx", "secukinumab",
+      "Orencia", "abatacept", "Sotyktu", "deucravacitinib",
+      "Zeposia", "ozanimod", "Taltz", "ixekizumab",
+      "Olumiant", "baricitinib", "Omvoh", "mirikizumab",
+      "Kevzara", "sarilumab", "Enbrel", "etanercept",
+      "Otezla", "apremilast", "Entyvio", "vedolizumab",
+      "Jyseleca", "filgotinib", "Tulisokibart", "MK-7240",
+      "Duvakitug", "Spevigo", "spesolimab", "Ilumya", "tildrakizumab"
+    ],
+    "companies": [
+      "AbbVie", "Janssen", "Roche", "Novartis", "Bristol Myers Squibb",
+      "Eli Lilly", "Sanofi", "Amgen", "Takeda", "Merck", "Gilead",
+      "Boehringer Ingelheim"
     ]
   },
   "sources": {
-    "rss": [
+    "google_news_rss": [
+      {
+        "name": "RA News (Google)",
+        "url": "https://news.google.com/rss/search?q=rheumatoid+arthritis+drug+trial+approval&hl=en-US&gl=US&ceid=US:en",
+        "indication": "RA"
+      },
+      {
+        "name": "Psoriasis News (Google)",
+        "url": "https://news.google.com/rss/search?q=plaque+psoriasis+drug+FDA+EMA+trial&hl=en-US&gl=US&ceid=US:en",
+        "indication": "Psoriasis"
+      },
+      {
+        "name": "Crohns Disease News (Google)",
+        "url": "https://news.google.com/rss/search?q=Crohns+disease+drug+trial+approval&hl=en-US&gl=US&ceid=US:en",
+        "indication": "Crohns"
+      },
+      {
+        "name": "Ulcerative Colitis News (Google)",
+        "url": "https://news.google.com/rss/search?q=ulcerative+colitis+drug+trial+approval&hl=en-US&gl=US&ceid=US:en",
+        "indication": "UC"
+      },
+      {
+        "name": "AbbVie Pipeline News (Google)",
+        "url": "https://news.google.com/rss/search?q=AbbVie+Rinvoq+OR+Skyrizi+OR+Humira&hl=en-US&gl=US&ceid=US:en",
+        "indication": "all"
+      },
+      {
+        "name": "J&J Janssen Pipeline News (Google)",
+        "url": "https://news.google.com/rss/search?q=Janssen+Stelara+OR+Tremfya+OR+Simponi&hl=en-US&gl=US&ceid=US:en",
+        "indication": "all"
+      },
+      {
+        "name": "Eli Lilly Pipeline News (Google)",
+        "url": "https://news.google.com/rss/search?q=Lilly+Taltz+OR+Olumiant+OR+Omvoh&hl=en-US&gl=US&ceid=US:en",
+        "indication": "all"
+      },
+      {
+        "name": "Takeda Entyvio News (Google)",
+        "url": "https://news.google.com/rss/search?q=Takeda+Entyvio+vedolizumab&hl=en-US&gl=US&ceid=US:en",
+        "indication": "all"
+      },
+      {
+        "name": "Anti-TL1A Pipeline (Google)",
+        "url": "https://news.google.com/rss/search?q=Tulisokibart+OR+Duvakitug+OR+TL1A+immunology&hl=en-US&gl=US&ceid=US:en",
+        "indication": "all"
+      },
+      {
+        "name": "FDA Immunology Approvals (Google)",
+        "url": "https://news.google.com/rss/search?q=FDA+approval+immunology+arthritis+psoriasis+colitis&hl=en-US&gl=US&ceid=US:en",
+        "indication": "all"
+      }
+    ],
+    "direct_rss": [
       {
         "name": "FDA Press Releases",
         "url": "https://www.fda.gov/about-fda/contact-fda/stay-informed/rss-feeds/press-releases/rss.xml",
@@ -56,74 +93,6 @@
         "name": "Merck News",
         "url": "https://www.merck.com/feed/",
         "type": "company"
-      }
-    ],
-    "scrape": [
-      {
-        "name": "AbbVie Press Releases",
-        "url": "https://news.abbvie.com/news-releases",
-        "type": "company",
-        "selector": "article, .news-release, .press-release"
-      },
-      {
-        "name": "J&J News",
-        "url": "https://www.jnj.com/latest-news",
-        "type": "company",
-        "selector": "article, .news-item"
-      },
-      {
-        "name": "Roche Media Releases",
-        "url": "https://www.roche.com/media/releases.htm",
-        "type": "company",
-        "selector": "article, .media-release"
-      },
-      {
-        "name": "Novartis Media Releases",
-        "url": "https://www.novartis.com/news/media-releases",
-        "type": "company",
-        "selector": "article, .media-release"
-      },
-      {
-        "name": "BMS Press Releases",
-        "url": "https://news.bms.com/news-releases",
-        "type": "company",
-        "selector": "article, .news-release"
-      },
-      {
-        "name": "Eli Lilly News",
-        "url": "https://investor.lilly.com/news-releases",
-        "type": "company",
-        "selector": "article, .news-release"
-      },
-      {
-        "name": "Sanofi Press Releases",
-        "url": "https://www.sanofi.com/en/media-room/press-releases",
-        "type": "company",
-        "selector": "article, .press-release"
-      },
-      {
-        "name": "Amgen Press Releases",
-        "url": "https://www.amgen.com/newsroom/press-releases",
-        "type": "company",
-        "selector": "article, .press-release"
-      },
-      {
-        "name": "Takeda News Releases",
-        "url": "https://www.takeda.com/newsroom/newsreleases/",
-        "type": "company",
-        "selector": "article, .news-release"
-      },
-      {
-        "name": "Gilead Press Releases",
-        "url": "https://www.gilead.com/news-and-press/press-room/press-releases",
-        "type": "company",
-        "selector": "article, .press-release"
-      },
-      {
-        "name": "Boehringer Ingelheim Press Releases",
-        "url": "https://www.boehringer-ingelheim.com/press-release",
-        "type": "company",
-        "selector": "article, .press-release"
       }
     ]
   }
