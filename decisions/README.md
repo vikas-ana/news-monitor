@@ -1,12 +1,13 @@
 # Architecture Decision Records (ADRs)
 
-This folder tracks key decisions made during the development of News Monitor.
+This folder tracks key decisions and intelligence for the News Monitor project.
 
 ## Index
 
-| # | Decision | Status | Date |
+| # | Document | Status | Date |
 |---|----------|--------|------|
 | 001 | [Initial Tech Stack Options](ADR-001-tech-stack.md) | 🔄 Proposed | 2026-04-04 |
+| — | [Competitive Landscape: RA, Psoriasis, Crohns, UC](competitive-landscape.md) | ✅ Active | 2026-04-05 |
 
 ---
 
