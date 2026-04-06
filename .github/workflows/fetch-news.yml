@@ -10,6 +10,9 @@ on:
         required: false
         default: '2'
 
+permissions:
+  contents: write
+
 jobs:
   fetch-and-process:
     runs-on: ubuntu-latest
@@ -30,7 +33,7 @@ jobs:
           DAYS=${{ github.event.inputs.days_back || '2' }}
           python src/fetcher.py --days $DAYS
 
-      - name: Step 2 — Process with LLM (classify, summarize, score, alert)
+      - name: Step 2 — LLM Process (classify, summarize, score, alert)
         run: python src/processor.py
 
       - name: Commit backup JSON
