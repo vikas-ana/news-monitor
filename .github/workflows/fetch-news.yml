@@ -2,7 +2,7 @@ name: News Monitor Fetcher
 
 on:
   schedule:
-    - cron: '0 */4 * * *'   # Every 4 hours
+    - cron: '0 */4 * * *'
   workflow_dispatch:
     inputs:
       days_back:
@@ -30,11 +30,11 @@ jobs:
           python src/fetcher.py --days $DAYS
 
       - name: Commit backup JSON
+        continue-on-error: true
         run: |
           git config user.name "News Monitor Bot"
           git config user.email "bot@news-monitor"
           git add output/results.json
-          git diff --staged --quiet || git commit -m "news: update results [$(date -u '+%Y-%m-%d %H:%M UTC')]"
-          git push
+          git diff --staged --quiet && echo "No changes to commit" || (git commit -m "news: update results [$(date -u '+%Y-%m-%d %H:%M UTC')]" && git push)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
