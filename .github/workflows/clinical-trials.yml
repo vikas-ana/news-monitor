@@ -2,13 +2,10 @@ name: Clinical Trials Monitor
 
 on:
   schedule:
-    - cron: '0 7 * * *'   # Daily at 7am UTC
+    # Every 15 min during CT.gov update window: 08:00–11:00 UTC daily
+    # CT.gov dataTimestamp confirms daily update at ~09:00 UTC
+    - cron: '0,15,30,45 8-11 * * *'
   workflow_dispatch:
-    inputs:
-      force_alert:
-        description: 'Send alerts even for unchanged trials (yes/no)'
-        required: false
-        default: 'no'
 
 permissions:
   contents: write
@@ -33,10 +30,9 @@ jobs:
 
       - name: Step 1 — Fetch & diff ClinicalTrials.gov
         run: python src/trials_monitor.py
-        # Queries all 4 indications, filters by tracked companies,
-        # compares vs stored state, marks new/changed as is_alert=true
+        # First run: full history load
+        # Subsequent runs: incremental (last 2 days only) — runs in ~30 seconds
 
       - name: Step 2 — Send trial alerts via email
         run: python src/email_alerts.py --source trials
         continue-on-error: true
-        # Sends alerts for clinical_trials where is_alert=true and alert_sent=false
