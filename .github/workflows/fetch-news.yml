@@ -2,7 +2,7 @@ name: News Monitor Fetcher
 
 on:
   schedule:
-    - cron: '0 */4 * * *'
+    - cron: '0 7,14,21 * * *'   # 3x daily: 7am, 2pm, 9pm UTC
   workflow_dispatch:
     inputs:
       days_back:
@@ -49,10 +49,8 @@ jobs:
       - name: Step 3 — Sync to Neo4j knowledge graph
         run: python src/load_neo4j.py
         continue-on-error: true
-        # MERGE = idempotent: updates existing nodes, creates new ones
-        # New drugs (is_new_asset=true) are added automatically each cycle
 
-      - name: Step 4 — Send email alerts (score ≥ 6, unsent)
+      - name: Step 4 — Send email alerts (score ≥ 7, unsent)
         run: python src/email_alerts.py
         continue-on-error: true
 
