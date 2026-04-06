@@ -11,11 +11,12 @@ on:
         default: '2'
 
 jobs:
-  fetch-news:
+  fetch-and-process:
     runs-on: ubuntu-latest
     env:
       SUPABASE_URL: https://ijunshkmqdqhdeivcjze.supabase.co
       SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      GROQ_KEY: ${{ secrets.GROQ_KEY }}
     steps:
       - uses: actions/checkout@v3
 
@@ -24,10 +25,13 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Run fetcher
+      - name: Step 1 — Fetch news
         run: |
           DAYS=${{ github.event.inputs.days_back || '2' }}
           python src/fetcher.py --days $DAYS
+
+      - name: Step 2 — Process with LLM (classify, summarize, score, alert)
+        run: python src/processor.py
 
       - name: Commit backup JSON
         continue-on-error: true
@@ -35,6 +39,6 @@ jobs:
           git config user.name "News Monitor Bot"
           git config user.email "bot@news-monitor"
           git add output/results.json
-          git diff --staged --quiet && echo "No changes to commit" || (git commit -m "news: update results [$(date -u '+%Y-%m-%d %H:%M UTC')]" && git push)
+          git diff --staged --quiet && echo "No changes" || (git commit -m "news: update results [$(date -u '+%Y-%m-%d %H:%M UTC')]" && git push)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
