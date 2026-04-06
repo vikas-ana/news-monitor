@@ -20,11 +20,18 @@ jobs:
       SUPABASE_URL: https://ijunshkmqdqhdeivcjze.supabase.co
       SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
       GROQ_KEY: ${{ secrets.GROQ_KEY }}
+      NEO4J_URI: neo4j+s://e56a592d.databases.neo4j.io
+      NEO4J_USER: ${{ secrets.NEO4J_USER }}
+      NEO4J_PASS: ${{ secrets.NEO4J_PASS }}
+      GMAIL_USER: ${{ secrets.GMAIL_USER }}
+      GMAIL_APP_PASS: ${{ secrets.GMAIL_APP_PASS }}
+      ALERT_EMAIL: ${{ secrets.ALERT_EMAIL }}
+
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
@@ -35,6 +42,17 @@ jobs:
 
       - name: Step 2 — LLM Process (classify, summarize, score, alert)
         run: python src/processor.py
+
+      - name: Step 3 — Sync to Neo4j knowledge graph
+        run: python src/load_neo4j.py
+        # MERGE operations are idempotent — safe to run every cycle
+        # Adds new drugs, links new articles, updates existing nodes
+        # New assets flagged by fetcher (is_new_asset=true) flow in automatically
+
+      - name: Step 4 — Send email alerts (score ≥ 6, unsent)
+        run: python src/email_alerts.py
+        # Only fires if GMAIL_USER and GMAIL_APP_PASS secrets are set
+        continue-on-error: true
 
       - name: Commit backup JSON
         continue-on-error: true
