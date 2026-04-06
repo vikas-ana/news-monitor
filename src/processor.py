@@ -5,13 +5,14 @@ Uses subprocess curl for all HTTP calls (avoids proxy issues).
 Pipeline: extract → classify → summarize → title → score → alert
 """
 
-import json, re, os, subprocess
+import json, re, os, subprocess, time
 from datetime import datetime, timezone
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://ijunshkmqdqhdeivcjze.supabase.co")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 GROQ_KEY     = os.environ.get("GROQ_KEY", "")
-GROQ_MODEL   = "llama-3.3-70b-versatile"
+GROQ_MODEL_LARGE = "llama-3.3-70b-versatile"  # for summarize, score, alert
+GROQ_MODEL_FAST  = "llama-3.1-8b-instant"         # for classify, extract, title
 
 DRUG_LOOKUP = {
     "humira": ("AbbVie", "Approved"), "adalimumab": ("AbbVie", "Approved"),
@@ -73,9 +74,9 @@ def supabase_patch(table, record_id, data):
         "apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
         "Content-Type": "application/json", "Prefer": "return=minimal"})
 
-def groq(system, user, max_tokens=400):
+def groq(system, user, max_tokens=400, model=None):
     payload = json.dumps({
-        "model": GROQ_MODEL,
+        "model": model or GROQ_MODEL_LARGE,
         "messages": [{"role":"system","content":system},{"role":"user","content":user}],
         "max_tokens": max_tokens, "temperature": 0.2
     })
@@ -93,6 +94,8 @@ def groq(system, user, max_tokens=400):
     except Exception as e:
         print(f"  Groq parse error: {e} | raw: {raw[:100]}")
         return None
+    finally:
+        time.sleep(1.5)  # Respect Groq rate limits
 
 def extract_regex(text):
     tl = text.lower()
