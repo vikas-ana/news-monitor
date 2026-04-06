@@ -35,6 +35,9 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install dependencies
+        run: pip install neo4j
+
       - name: Step 1 — Fetch news
         run: |
           DAYS=${{ github.event.inputs.days_back || '2' }}
@@ -45,13 +48,12 @@ jobs:
 
       - name: Step 3 — Sync to Neo4j knowledge graph
         run: python src/load_neo4j.py
-        # MERGE operations are idempotent — safe to run every cycle
-        # Adds new drugs, links new articles, updates existing nodes
-        # New assets flagged by fetcher (is_new_asset=true) flow in automatically
+        continue-on-error: true
+        # MERGE = idempotent: updates existing nodes, creates new ones
+        # New drugs (is_new_asset=true) are added automatically each cycle
 
       - name: Step 4 — Send email alerts (score ≥ 6, unsent)
         run: python src/email_alerts.py
-        # Only fires if GMAIL_USER and GMAIL_APP_PASS secrets are set
         continue-on-error: true
 
       - name: Commit backup JSON
