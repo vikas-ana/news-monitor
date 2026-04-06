@@ -97,7 +97,7 @@ def process_article(article):
     text  = f"{article.get('raw_title','')} {article.get('full_content','')}"
     title = article.get('raw_title','')
     art_id = article['id']
-    updates = {"processed_at": datetime.now(timezone.utc).isoformat()}
+    updates = {}  # processed_at set only if LLM succeeds
 
     # Step 1: Extract product/company/phase (regex first)
     product, company, phase = extract_regex(text)
@@ -186,6 +186,9 @@ def process_article(article):
         )
         if alert: updates["alert_text"] = alert
 
+    # Only mark as processed if LLM actually ran (category set)
+    if updates.get("category"):
+        updates["processed_at"] = datetime.now(timezone.utc).isoformat()
     return updates
 
 def main():
