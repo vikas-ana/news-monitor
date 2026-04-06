@@ -1,0 +1,31 @@
+name: Load Neo4j Knowledge Graph
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "load" to confirm loading data into Neo4j'
+        required: true
+        default: 'load'
+
+jobs:
+  load-graph:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: https://ijunshkmqdqhdeivcjze.supabase.co
+      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      NEO4J_URI: neo4j+s://e56a592d.databases.neo4j.io
+      NEO4J_USER: ${{ secrets.NEO4J_USER }}
+      NEO4J_PASS: ${{ secrets.NEO4J_PASS }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Load knowledge graph
+        run: python src/load_neo4j.py
