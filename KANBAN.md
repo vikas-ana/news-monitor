@@ -20,14 +20,15 @@
 | 2026-04-06 | Add incremental mode to trials monitor (last 2 days on repeat runs) | ✅ Done | 2026-04-06 |
 | 2026-04-06 | Set CT.gov schedule — every 15 min during 08:00–11:00 UTC | ✅ Done | 2026-04-06 |
 | 2026-04-06 | Set news schedule — 3× daily (7am, 2pm, 9pm UTC) | ✅ Done | 2026-04-06 |
-| 2026-04-07 | Build `press_release_scraper.py` — SEC EDGAR + GlobeNewswire | ✅ Done | 2026-04-07 |
+| 2026-04-07 | Build `press_release_scraper.py` — SEC EDGAR 14 companies | ✅ Done | 2026-04-07 |
 | 2026-04-07 | Build `backfill_content.py` — URL scrape + Google Cache fallback | ✅ Done | 2026-04-07 |
 | 2026-04-07 | Email deduplication — group same-event articles into one alert | ✅ Done | 2026-04-07 |
 | 2026-04-07 | Share price enrichment in email alerts (Yahoo Finance) | ✅ Done | 2026-04-07 |
 | 2026-04-07 | Write `src/README.md` and `output/README.md` documentation | ✅ Done | 2026-04-07 |
 | 2026-04-07 | Write full root `README.md` with pipeline, scoring, stack | ✅ Done | 2026-04-07 |
+| 2026-04-07 | Fix press release scraper — remove broken GlobeNewswire feeds, add GSK | ✅ Done | 2026-04-07 |
 | 2026-04-07 | First ClinicalTrials.gov full history load | 🔄 Ongoing | — |
-| 2026-04-07 | Load drug profiles + SWOT into Neo4j graph | ⏳ Pending | — |
+| — | Load drug profiles + SWOT into Neo4j graph | ⏳ Pending | — |
 | — | Email alerts for clinical trial changes (`--source trials`) | ⏳ Pending | — |
 | — | Web dashboard — read-only UI to browse articles and trials | ⏳ Pending | — |
 | — | User feedback loop — thumbs up/down on alerts → improve scoring | ⏳ Pending | — |
@@ -37,3 +38,7 @@
 ---
 
 **Legend:** ✅ Done · 🔄 Ongoing · ⏳ Pending
+
+**Last updated:** 2026-04-07
+
+**Press release coverage note:** GlobeNewswire company-specific RSS feeds return HTTP 400 from GitHub Actions (network-level block). SEC EDGAR now covers 14 companies. Roche and Boehringer Ingelheim (private) are covered via Google News RSS in `fetcher.py`.
