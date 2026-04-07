@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
-Press Release Scraper v2
+Press Release Scraper v3
 Sources:
   - SEC EDGAR 8-K + 6-K/EX-99.1 (all public companies) — free, full text
-  - GlobeNewswire RSS — Roche, Novartis, Boehringer, UCB, Sanofi
-No Cloudflare, no JS rendering needed.
+    Covers: AbbVie, J&J, Eli Lilly, Amgen, BMS, Merck, Pfizer, Sanofi,
+            Takeda, AstraZeneca, Gilead, UCB, Novartis, GSK
+  - Roche + Boehringer covered via Google News RSS (fetcher.py)
+Note: GlobeNewswire company-specific feeds return HTTP 400 from GitHub Actions.
 """
 
 import os, json, subprocess, re, time
@@ -13,7 +15,7 @@ from datetime import datetime, timezone, timedelta
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_KEY"]
 
-# CIK map — US-listed companies (8-K filers)
+# CIK map — US-listed companies (8-K) and ADRs (6-K)
 SEC_CIK = {
     "AbbVie":        "0001551152",
     "J&J (Janssen)": "0000200406",
@@ -22,22 +24,14 @@ SEC_CIK = {
     "BMS":           "0000014272",
     "Merck":         "0000310158",
     "Pfizer":        "0000078003",
+    "GSK":           "0001131399",   # US ADR, files 6-K
     "Sanofi":        "0001121404",   # US ADR, files 6-K
     "Takeda":        "0001395064",   # US ADR, files 6-K
     "AstraZeneca":   "0000901832",   # US ADR, files 6-K
     "Gilead":        "0000882184",
-    "UCB":           "0001060349",
+    "UCB":           "0001060349",   # US ADR, files 6-K
     "Novartis":      "0001114448",   # US ADR, files 6-K
 }
-
-# GlobeNewswire RSS — EU companies with good coverage
-GLOBENEWSWIRE_FEEDS = [
-    ("Roche",                "https://www.globenewswire.com/RssFeed/company/roche-holding-ag"),
-    ("Novartis",             "https://www.globenewswire.com/RssFeed/company/novartis-ag"),
-    ("Boehringer Ingelheim", "https://www.globenewswire.com/RssFeed/company/boehringer-ingelheim"),
-    ("UCB",                  "https://www.globenewswire.com/RssFeed/company/ucb"),
-    ("Sanofi",               "https://www.globenewswire.com/RssFeed/company/sanofi"),
-]
 
 INDICATION_TERMS = [
     "rheumatoid arthritis", "plaque psoriasis", "psoriasis",
@@ -47,6 +41,7 @@ INDICATION_TERMS = [
     "cosentyx", "taltz", "omvoh", "zeposia", "sotyktu", "kevzara",
     "duvakitug", "tulisokibart", "alumis", "upadacitinib", "risankizumab",
     "guselkumab", "secukinumab", "ixekizumab", "vedolizumab", "mirikizumab",
+    "bimekizumab", "spesolimab", "izokibep", "deucravacitinib",
 ]
 
 def is_relevant(text):
@@ -108,7 +103,6 @@ def get_exhibit_text(cik, accession):
     cik_int    = str(int(cik))
     index_url  = f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{acc_nodash}/{accession}-index.htm"
     index_html = curl_get(index_url, timeout=15)
-    # Parse filing index table - look for EX-99 description in table rows
     rows = re.findall(r'<tr[^>]*>(.*?)</tr>', index_html, re.DOTALL|re.IGNORECASE)
     pr_links = []
     all_htm  = []
@@ -117,7 +111,6 @@ def get_exhibit_text(cik, accession):
         if not href: continue
         link = href.group(1)
         all_htm.append(link)
-        # EX-99.1 is the press release exhibit
         if re.search(r'EX-99|ex99|exhibit.?99', row, re.IGNORECASE):
             pr_links.append(link)
     if not pr_links: pr_links = all_htm  # fallback
@@ -138,8 +131,9 @@ def scrape_sec(company, cik, known_urls, days_back):
         if not pr_url or not text: continue
         if pr_url in known_urls: continue
         if not is_relevant(text):
+            print(f"    ⏭  {f['date']} — not in scope (financial/other)")
             continue
-        # Extract title: try HTML <title>, then h1, then press release pattern
+        # Extract title
         html_title = re.search(r'<title[^>]*>([^<]{10,200})</title>', html, re.IGNORECASE)
         if html_title:
             title = re.sub(r'\s*[|–\-]\s*(SEC|Edgar|EDGAR|Filing).*$', '', html_title.group(1)).strip()
@@ -161,48 +155,15 @@ def scrape_sec(company, cik, known_urls, days_back):
         time.sleep(0.3)
     return added
 
-# ── GlobeNewswire RSS ─────────────────────────────────────────────────────────
-def scrape_globenewswire(known_urls, days_back):
-    import xml.etree.ElementTree as ET
-    added   = []
-    cutoff  = datetime.now() - timedelta(days=days_back)
-    for company, feed_url in GLOBENEWSWIRE_FEEDS:
-        print(f"  [{company}] GlobeNewswire RSS...")
-        raw = curl_get(feed_url, timeout=15)
-        if not raw: continue
-        try: root = ET.fromstring(raw)
-        except: continue
-        for item in root.iter("item"):
-            link  = (item.findtext("link") or "").strip()
-            title = (item.findtext("title") or "").strip()
-            desc  = (item.findtext("description") or "").strip()
-            if not link or link in known_urls: continue
-            if not is_relevant(f"{title} {desc}"): continue
-            art_html = curl_get(link, timeout=15)
-            text     = strip_html(art_html) if art_html and len(art_html) > 500 else desc
-            supa_upsert({
-                "url":          link,
-                "raw_title":    title[:300],
-                "full_content": text[:12000],
-                "source":       "press_release",
-                "company":      company,
-                "article_date": datetime.now().strftime("%Y-%m-%d"),
-                "fetched_at":   datetime.now(timezone.utc).isoformat(),
-                "indication":   "all",
-            })
-            added.append(title[:70])
-            print(f"    ✅ {title[:70]}")
-            time.sleep(0.4)
-    return added
-
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--days", type=int, default=7)
     args = parser.parse_args()
-    print(f"\n=== Press Release Scraper v2 — {datetime.now().strftime('%Y-%m-%d %H:%M UTC')} ===")
-    print(f"Window: {args.days} days | Filter: RA/Psoriasis/Crohn's/UC")
+    print(f"\n=== Press Release Scraper v3 — {datetime.now().strftime('%Y-%m-%d %H:%M UTC')} ===")
+    print(f"Window: {args.days} days | Source: SEC EDGAR (14 companies)")
+    print(f"Filter: RA / Plaque Psoriasis / Crohn's / UC")
     print("=" * 60)
     known = get_known_urls()
     print(f"Known press release URLs in DB: {len(known)}\n")
@@ -210,7 +171,6 @@ def main():
     for company, cik in SEC_CIK.items():
         total.extend(scrape_sec(company, cik, known, args.days))
         time.sleep(0.3)
-    total.extend(scrape_globenewswire(known, args.days))
     print(f"\n=== Done: {len(total)} new relevant press releases ===")
     for t in total: print(f"  • {t}")
 
