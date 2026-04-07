@@ -4,6 +4,8 @@ Automated competitive intelligence platform for **Rheumatoid Arthritis, Plaque P
 
 Runs entirely free on GitHub Actions + Supabase + Groq.
 
+→ **[Project Kanban Board](KANBAN.md)**
+
 ---
 
 ## What It Does
@@ -11,7 +13,9 @@ Runs entirely free on GitHub Actions + Supabase + Groq.
 | Source | Frequency | Output |
 |--------|-----------|--------|
 | Google News RSS (4 indications) | 3× daily | Scored + summarised articles in Supabase |
-| FDA / EMA / Merck RSS | 3× daily | Regulatory & company news |
+| FDA / EMA RSS | 3× daily | Regulatory & company news |
+| SEC EDGAR 8-K/EX-99.1 (12 US companies) | 3× daily | Full original press release text |
+| GlobeNewswire RSS (Roche, Novartis, Boehringer, UCB, Sanofi) | 3× daily | EU company press releases |
 | ClinicalTrials.gov API | Every 15 min (8–11am UTC) | New trials + change detection |
 
 Email alerts sent to `vikassharma58@gmail.com` for:
@@ -30,6 +34,9 @@ Email alerts sent to `vikassharma58@gmail.com` for:
 | Neo4j AuraDB Free | Knowledge graph (drug → company → indication → MOA) |
 | Groq (Llama 3.1 8B + 3.3 70B) | LLM processing — classify, summarise, score |
 | Claude Haiku | Paid fallback if Groq rate-limited |
+| SEC EDGAR | Free full-text press releases (no Cloudflare) |
+| GlobeNewswire RSS | EU pharma press releases |
+| Yahoo Finance | Share price enrichment in email alerts |
 | Gmail SMTP | Email alerts |
 
 ---
@@ -37,9 +44,11 @@ Email alerts sent to `vikassharma58@gmail.com` for:
 ## Pipeline — How Each Article Is Processed
 
 ```
-RSS Feed / FDA / EMA
+SEC EDGAR / GlobeNewswire / Google News RSS / FDA / EMA
         ↓
-[ fetcher.py ] ── regex extract drug/company/phase ──→ Supabase (raw)
+[ fetcher.py + press_release_scraper.py ] ── extract drug/company/phase ──→ Supabase (raw)
+        ↓
+[ backfill_content.py ] ── scrape full text → Google Cache fallback
         ↓
 [ processor.py ]
   Step 0: In-scope filter (RA/Psoriasis/Crohn's/UC?) → if NO: score=1, skip
@@ -50,9 +59,9 @@ RSS Feed / FDA / EMA
   Step 5: Relevance score 1–10                        → Groq 70B
   Step 6: Alert text (if score ≥ 7 or auto-trigger)  → Groq 70B
         ↓
-[ load_neo4j.py ] ── sync drugs, SWOT, articles ──→ Neo4j graph
+[ load_neo4j.py ] ── MERGE sync drugs, SWOT, articles ──→ Neo4j graph
         ↓
-[ email_alerts.py ] ── send unsent alerts ──→ Gmail
+[ email_alerts.py ] ── deduplicate → add share price → send Gmail
 ```
 
 **LLM fallback chain:** `llama-3.1-8b` → `llama-3.3-70b` → `gemma2-9b` → `Claude Haiku`
@@ -61,7 +70,7 @@ RSS Feed / FDA / EMA
 
 ## Relevance Scoring (1–10)
 
-All scores assume the article is about RA, Psoriasis, Crohn's, or UC. Anything else scores 1 and is filtered out before LLM processing.
+All scores assume the article is about RA, Psoriasis, Crohn's, or UC. Anything else is filtered out before LLM.
 
 | Score | Event |
 |-------|-------|
@@ -77,8 +86,7 @@ All scores assume the article is about RA, Psoriasis, Crohn's, or UC. Anything e
 
 **Alert threshold: score ≥ 7**
 
-### Auto-alert triggers (bypass score threshold)
-These always send an alert regardless of score:
+### Auto-alert triggers (bypass score)
 - New Phase 3 trial initiated or competitor entering Phase 3
 - FDA or EMA safety warning / boxed warning / clinical hold
 - Commercial product launch
@@ -89,45 +97,39 @@ These always send an alert regardless of score:
 
 Tracks 8 fields per trial. Any change triggers a `Trial Update` alert:
 
-| Field | Example change |
-|-------|---------------|
+| Field | Example |
+|-------|---------|
 | Recruitment status | `Recruiting` → `Completed` |
 | Enrollment target | `450` → `620` |
 | Trial title | Protocol amendment rename |
-| Interventions / dose | New arm added or dose changed |
+| Interventions / dose | New arm or dose change |
 | Primary outcome measures | Endpoint revised |
-| Eligibility criteria | Inclusion/exclusion criteria updated |
-| Primary completion date | Date pushed back or pulled forward |
+| Eligibility criteria | Inclusion/exclusion updated |
+| Primary completion date | Date pushed or pulled |
 | Study type | Design change |
 
-Filter: only trials where sponsor **or** collaborator class = `INDUSTRY`.
+Filter: sponsor OR collaborator class = `INDUSTRY` only.
 
 ---
 
 ## src/ — Pipeline Scripts
 
-### fetcher.py
-Pulls RSS feeds → extracts drug/company/phase via regex → writes to Supabase `articles`.
-Flags unknown drugs as `is_new_asset = true`. Deduplicates by URL.
-
-### processor.py
-Picks up `processed_at = null` articles → runs 6-step LLM pipeline → updates Supabase with category, summary, score, alert text.
-
-### load_neo4j.py
-Syncs Supabase → Neo4j using `MERGE` (idempotent). Builds nodes for Drug, Company, Indication, MOA, Article, SWOT. Auto-creates `COMPETES_WITH` edges between drugs sharing an indication.
-
-### email_alerts.py
-Queries `is_alert = true AND alert_sent = false` → sends via Gmail SMTP → marks `alert_sent = true`.
-
-### trials_monitor.py
-Fetches ClinicalTrials.gov API by indication → filters industry sponsors → compares vs stored state → writes new/updated trials to Supabase `clinical_trials`.
+| Script | Job |
+|--------|-----|
+| `fetcher.py` | RSS feeds → Supabase raw articles |
+| `press_release_scraper.py` | SEC EDGAR 8-K + GlobeNewswire → full press release text |
+| `backfill_content.py` | Fetch full text via URL scrape + Google Cache |
+| `processor.py` | LLM pipeline — classify, summarise, score, alert |
+| `load_neo4j.py` | Sync Supabase → Neo4j knowledge graph (MERGE, idempotent) |
+| `email_alerts.py` | Deduplicate, enrich with share price, send Gmail |
+| `trials_monitor.py` | ClinicalTrials.gov — new trials + change detection |
 
 ---
 
 ## Folder Structure
 
 ```
-src/                  # Pipeline scripts
+src/                  # Pipeline scripts (see src/README.md)
 config/
   sources.json        # RSS feeds + keywords
 database/
@@ -135,19 +137,11 @@ database/
   trials_migration.sql     # Clinical trials schema
   neo4j_setup.cypher       # Knowledge graph schema
 output/
-  results.json        # JSON backup after each news run
+  results.json        # JSON backup after each news run (see output/README.md)
 decisions/
   competitive-landscape.md  # RA, Psoriasis, Crohn's, UC competitor analysis
 .github/workflows/
   fetch-news.yml            # News pipeline (3× daily: 7am, 2pm, 9pm UTC)
   clinical-trials.yml       # Trials monitor (every 15 min, 8–11am UTC)
+KANBAN.md             # Project task board
 ```
-
----
-
-## Indications in Scope
-
-- Rheumatoid Arthritis (RA)
-- Plaque Psoriasis
-- Crohn's Disease
-- Ulcerative Colitis (UC)
