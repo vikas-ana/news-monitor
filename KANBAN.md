@@ -23,30 +23,34 @@
 | 2026-04-07 | Build `backfill_content.py` — URL scrape + Google Cache fallback | ✅ Done | 2026-04-07 |
 | 2026-04-07 | Email deduplication — group same-event articles into one alert | ✅ Done | 2026-04-07 |
 | 2026-04-07 | Share price enrichment in email alerts (Yahoo Finance) | ✅ Done | 2026-04-07 |
-| 2026-04-07 | Write `src/README.md` and `output/README.md` documentation | ✅ Done | 2026-04-07 |
-| 2026-04-07 | Write full root `README.md` with pipeline, scoring, stack | ✅ Done | 2026-04-07 |
-| 2026-04-07 | Press release scraper v4 — EDGAR + AbbVie/UCB direct web + Lilly RSS | ✅ Done | 2026-04-07 |
+| 2026-04-07 | Write README.md + KANBAN.md documentation | ✅ Done | 2026-04-07 |
+| 2026-04-07 | Press release scraper v5 — Jina.ai direct scraping (13 companies) | ✅ Done | 2026-04-07 |
 | 2026-04-07 | First ClinicalTrials.gov full history load | 🔄 Ongoing | — |
 | — | Load drug profiles + SWOT into Neo4j graph | ⏳ Pending | — |
 | — | Email alerts for clinical trial changes (`--source trials`) | ⏳ Pending | — |
 | — | Web dashboard — read-only UI to browse articles and trials | ⏳ Pending | — |
-| — | User feedback loop — thumbs up/down on alerts → improve scoring | ⏳ Pending | — |
-| — | ClinicalTrials.gov backfill — test change detection on historical data | ⏳ Pending | — |
+| — | User feedback loop — thumbs up/down on alerts | ⏳ Pending | — |
 | — | Set `ANTHROPIC_KEY` GitHub secret for Haiku fallback | ⏳ Pending | — |
-| — | Playwright/headless browser for Amgen/Merck/GSK/Gilead/Roche/Sanofi (optional) | ⏳ Pending | — |
 
 ---
 
-**Legend:** ✅ Done · 🔄 Ongoing · ⏳ Pending
-
+**Legend:** ✅ Done · 🔄 Ongoing · ⏳ Pending  
 **Last updated:** 2026-04-07
 
-**Press release sources (v4):**
-| Company | Source | Status |
+## Press Release Sources (v5)
+
+| Company | Source | Method |
 |---|---|---|
-| AbbVie | Direct web (`news.abbvie.com`) + EDGAR | ✅ |
-| UCB | Direct web (`www.ucb.com/newsroom`) + EDGAR | ✅ |
-| Eli Lilly | IR RSS (`investor.lilly.com/rss`) + EDGAR | ✅ |
-| J&J, Amgen, BMS, Merck, Pfizer, GSK, Sanofi, Takeda, AZ, Gilead, Novartis | SEC EDGAR 8-K/6-K | ✅ |
-| Roche, Boehringer Ingelheim | Google News RSS (fetcher.py) | ✅ |
-| Amgen, Merck, GSK, Gilead, Roche, Sanofi, Takeda | Direct web blocked (JS/CF) | ⚠️ |
+| AbbVie | news.abbvie.com | Jina.ai |
+| BMS | news.bms.com | Jina.ai |
+| Sanofi | sanofi.com/media-room | Jina.ai |
+| Roche | roche.com/media/releases | Jina.ai |
+| Takeda | takeda.com/newsroom | Jina.ai |
+| Gilead | gilead.com/news | Jina.ai |
+| AstraZeneca | astrazeneca.com/media-centre | Jina.ai |
+| Amgen | amgen.com/newsroom | Jina.ai |
+| GSK | gsk.com/media/press-releases | Jina.ai |
+| Pfizer | pfizer.com/news/press-releases | Jina.ai |
+| UCB | ucb.com/newsroom | Jina.ai |
+| J&J | jnj.com/latest-news | Jina.ai |
+| Eli Lilly | investor.lilly.com/rss + Jina | RSS + Jina |
