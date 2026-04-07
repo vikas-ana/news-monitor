@@ -43,14 +43,18 @@ jobs:
           DAYS=${{ github.event.inputs.days_back || '2' }}
           python src/fetcher.py --days $DAYS
 
-      - name: Step 2 — LLM Process (classify, summarize, score, alert)
+      - name: Step 2 — Fetch full article content (scrape + Groq expand)
+        run: python src/backfill_content.py
+        continue-on-error: true
+
+      - name: Step 3 — LLM Process (classify, summarize, score, alert)
         run: python src/processor.py
 
-      - name: Step 3 — Sync to Neo4j knowledge graph
+      - name: Step 4 — Sync to Neo4j knowledge graph
         run: python src/load_neo4j.py
         continue-on-error: true
 
-      - name: Step 4 — Send email alerts (score ≥ 7, unsent)
+      - name: Step 5 — Send email alerts (score ≥ 7, unsent)
         run: python src/email_alerts.py
         continue-on-error: true
 
