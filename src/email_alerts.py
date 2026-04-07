@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-Email alerts v2
-- Deduplicates: groups same drug/same day articles → one consolidated alert
+Email alerts v3
+- Deduplicates: groups same drug/same day articles -> one consolidated alert
 - Enriches: adds share price + day change for public companies
+- RAG context: similar past articles + wiki pages + Neo4j profile for alert generation
 - LLM dedup check: uses Groq to confirm if two articles are the same event
 """
 
@@ -18,13 +19,14 @@ GMAIL_USER   = os.environ["GMAIL_USER"]
 GMAIL_PASS   = os.environ["GMAIL_APP_PASS"]
 ALERT_TO     = os.environ.get("ALERT_EMAIL", os.environ["GMAIL_USER"])
 GROQ_KEY     = os.environ.get("GROQ_KEY", "")
+JINA_API_KEY = os.environ.get("JINA_API_KEY", "")
 
 CATEGORY_EMOJI = {"clinical": "🔬", "regulatory": "📋", "commercial": "💼"}
 SCORE_LABEL    = {10:"🚨 CRITICAL", 9:"🔴 HIGH", 8:"🟠 HIGH", 7:"🟡 MEDIUM", 6:"🟢 NOTABLE"}
 STATUS_EMOJI   = {"Recruiting":"🟢", "Active, not recruiting":"🔵", "Completed":"✅",
                   "Terminated":"🔴", "Withdrawn":"⚫", "Not yet recruiting":"⚪"}
 
-# ── Ticker lookup for share price enrichment ──────────────────────────────────
+# -- Ticker lookup for share price enrichment ---------------------------------
 COMPANY_TICKER = {
     "abbvie": "ABBV", "j&j": "JNJ", "janssen": "JNJ", "johnson & johnson": "JNJ",
     "roche": "RHHBY", "novartis": "NVS", "bms": "BMY", "bristol-myers squibb": "BMY",
@@ -33,7 +35,7 @@ COMPANY_TICKER = {
     "merck": "MRK", "ucb": "UCB", "sun pharma": "SUNPHARMA.NS",
 }
 
-# ── HTTP helpers ──────────────────────────────────────────────────────────────
+# -- HTTP helpers -------------------------------------------------------------
 def supa_get(table, params):
     url = f"{SUPABASE_URL}/rest/v1/{table}?{params}"
     r = subprocess.run(["curl","-s","-H",f"apikey: {SUPABASE_KEY}",
@@ -49,17 +51,31 @@ def supa_patch(table, filt, data):
         "-H","Content-Type: application/json","-H","Prefer: return=minimal",
         url,"-d",json.dumps(data)], capture_output=True, timeout=30)
 
+def supa_rpc(function_name, params):
+    """Call a Supabase RPC function (e.g. match_articles, match_wiki)."""
+    url = f"{SUPABASE_URL}/rest/v1/rpc/{function_name}"
+    r = subprocess.run([
+        "curl", "-s", "-X", "POST",
+        "-H", f"apikey: {SUPABASE_KEY}",
+        "-H", f"Authorization: Bearer {SUPABASE_KEY}",
+        "-H", "Content-Type: application/json",
+        "-H", "Accept: application/json",
+        url, "-d", json.dumps(params)
+    ], capture_output=True, text=True, timeout=30)
+    try:    return json.loads(r.stdout)
+    except: return []
+
 def curl_get(url):
     r = subprocess.run(["curl","-s","--max-time","10",url,"-H","Accept: application/json"],
         capture_output=True, text=True)
     try:    return json.loads(r.stdout)
     except: return {}
 
-def groq_call(prompt, max_tokens=10):
+def groq_call(prompt, max_tokens=10, model="llama-3.1-8b-instant"):
     if not GROQ_KEY: return None
-    payload = json.dumps({"model":"llama-3.1-8b-instant","max_tokens":max_tokens,
-        "temperature":0,"messages":[{"role":"user","content":prompt}]})
-    r = subprocess.run(["curl","-s","--max-time","15",
+    payload = json.dumps({"model": model, "max_tokens": max_tokens,
+        "temperature": 0, "messages": [{"role": "user", "content": prompt}]})
+    r = subprocess.run(["curl","-s","--max-time","30",
         "https://api.groq.com/openai/v1/chat/completions",
         "-H",f"Authorization: Bearer {GROQ_KEY}",
         "-H","Content-Type: application/json","-d",payload],
@@ -70,7 +86,125 @@ def groq_call(prompt, max_tokens=10):
     except: pass
     return None
 
-# ── Share price enrichment ────────────────────────────────────────────────────
+# -- RAG: Jina embedding + Supabase similarity search ------------------------
+def jina_embed_single(text):
+    """Embed a single text using Jina AI. Returns 768-dim vector or None."""
+    if not JINA_API_KEY:
+        return None
+    payload = json.dumps({
+        "model": "jina-embeddings-v2-base-en",
+        "input": [text[:2000]]  # cap at 2000 chars for speed
+    })
+    r = subprocess.run([
+        "curl", "-s", "--max-time", "20",
+        "-X", "POST", "https://api.jina.ai/v1/embeddings",
+        "-H", f"Authorization: Bearer {JINA_API_KEY}",
+        "-H", "Content-Type: application/json",
+        "-d", payload
+    ], capture_output=True, text=True)
+    try:
+        d = json.loads(r.stdout)
+        if "data" in d and d["data"]:
+            return d["data"][0]["embedding"]
+    except: pass
+    return None
+
+def get_rag_context(article):
+    """
+    Retrieve RAG context for an article:
+    1. Embed article title + summary
+    2. Find similar past articles (pgvector)
+    3. Find relevant wiki pages (pgvector)
+    Returns formatted context string (or empty string if RAG unavailable).
+    """
+    if not JINA_API_KEY:
+        return ""
+
+    title   = article.get("catchy_title") or article.get("raw_title") or ""
+    summary = article.get("summary") or ""
+    drug    = article.get("product_name") or ""
+    ind     = article.get("indication") or ""
+
+    query_text = f"{title} {summary[:400]} Drug: {drug} Indication: {ind}"
+    embedding  = jina_embed_single(query_text)
+    if not embedding:
+        return ""
+
+    # Format as pgvector string
+    emb_str = "[" + ",".join(f"{v:.6f}" for v in embedding) + "]"
+
+    context_parts = []
+
+    # 1. Similar past articles
+    similar = supa_rpc("match_articles", {
+        "query_embedding": emb_str,
+        "match_count": 4,
+        "min_similarity": 0.5
+    })
+    if isinstance(similar, list) and similar:
+        lines = ["**Similar past articles:**"]
+        article_id = article.get("id")
+        for s in similar:
+            if str(s.get("id")) == str(article_id):
+                continue  # skip self
+            lines.append(
+                f"- [{s.get('article_date','')}] {s.get('raw_title','?')} "
+                f"({s.get('company','?')}) -- similarity {s.get('similarity',0):.0%}"
+            )
+        if len(lines) > 1:
+            context_parts.append("\n".join(lines))
+
+    # 2. Relevant wiki pages
+    wiki_pages = supa_rpc("match_wiki", {
+        "query_embedding": emb_str,
+        "match_count": 2,
+        "min_similarity": 0.4
+    })
+    if isinstance(wiki_pages, list) and wiki_pages:
+        lines = ["**Knowledge base context:**"]
+        for w in wiki_pages:
+            # Use first 400 chars of wiki content as context snippet
+            snippet = (w.get("content") or "")[:400].replace("\n", " ")
+            lines.append(f"- **{w.get('entity_name','?')}** ({w.get('entity_type','?')}): {snippet}...")
+        context_parts.append("\n".join(lines))
+
+    return "\n\n".join(context_parts)
+
+def generate_enriched_alert(article, rag_context):
+    """
+    Use Groq + RAG context to generate a richer, more contextual alert_text.
+    Only called for score >= 7 articles.
+    Returns updated alert_text string or None if generation fails.
+    """
+    title   = article.get("catchy_title") or article.get("raw_title") or ""
+    summary = article.get("summary") or ""
+    score   = article.get("relevance_score") or 0
+    drug    = article.get("product_name") or ""
+    company = article.get("company") or ""
+    ind     = article.get("indication") or ""
+    existing_alert = article.get("alert_text") or ""
+
+    prompt = f"""You are a pharma intelligence analyst generating competitive intelligence alerts.
+
+ARTICLE:
+Title: {title}
+Drug: {drug} | Company: {company} | Indication: {ind} | Score: {score}/10
+Summary: {summary[:600]}
+Existing alert: {existing_alert[:300]}
+
+{("CONTEXT FROM KNOWLEDGE BASE:\n" + rag_context[:1500]) if rag_context else ""}
+
+Write a concise alert (2-3 sentences) covering:
+1. What happened and why it matters competitively
+2. How it relates to the competitive landscape (reference context if relevant)
+3. What to watch next
+
+Be specific, use drug names and company names. Do not use generic phrases like "important development".
+Return ONLY the alert text, no preamble."""
+
+    return groq_call(prompt, max_tokens=250, model="llama-3.1-8b-instant")
+
+# -- Share price enrichment ---------------------------------------------------
 _price_cache = {}
 
 def get_share_price(company):
@@ -99,7 +233,7 @@ def get_share_price(company):
     except: pass
     return None
 
-# ── Deduplication ─────────────────────────────────────────────────────────────
+# -- Deduplication ------------------------------------------------------------
 def same_event(title1, title2):
     """Use Groq to check if two article titles cover the same news event."""
     resp = groq_call(
@@ -117,14 +251,13 @@ def same_event(title1, title2):
 
 def deduplicate_alerts(articles):
     """
-    Group articles about the same event → keep highest scorer as lead,
+    Group articles about the same event -> keep highest scorer as lead,
     attach duplicates as 'also reported by' list.
     Returns list of (lead_article, [duplicate_articles]) tuples.
     """
     used = set()
     groups = []
 
-    # Sort by score desc so highest scorer becomes lead
     sorted_arts = sorted(articles, key=lambda x: x.get("relevance_score") or 0, reverse=True)
 
     for i, a in enumerate(sorted_arts):
@@ -132,7 +265,6 @@ def deduplicate_alerts(articles):
         dups = []
         for j, b in enumerate(sorted_arts):
             if i == j or j in used: continue
-            # Same drug + same date = candidate for dedup
             same_drug = (a.get("product_name") or "").lower() == (b.get("product_name") or "").lower()
             same_day  = a.get("article_date") == b.get("article_date")
             if same_drug and same_day:
@@ -141,13 +273,13 @@ def deduplicate_alerts(articles):
                 if same_event(t1, t2):
                     dups.append(b)
                     used.add(j)
-                    time.sleep(0.5)  # Groq rate buffer
+                    time.sleep(0.5)
         used.add(i)
         groups.append((a, dups))
 
     return groups
 
-# ── HTML builders ─────────────────────────────────────────────────────────────
+# -- HTML builders ------------------------------------------------------------
 def news_card(lead, dupes):
     score   = lead.get("relevance_score") or 0
     cat     = lead.get("category") or "unknown"
@@ -163,14 +295,12 @@ def news_card(lead, dupes):
     date_s  = lead.get("article_date") or ""
     meta    = " · ".join(p for p in [drug, company, ind, date_s] if p)
 
-    # Share price
     price_info = get_share_price(company)
     price_html = ""
     if price_info:
         price_html = f"""<span style="background:#f8f9fa;border:1px solid #dee2e6;border-radius:4px;
             padding:2px 8px;font-size:12px;margin-left:8px;">{price_info['display']}</span>"""
 
-    # Duplicate sources
     dupes_html = ""
     if dupes:
         sources = [f'<a href="{d.get("url","#")}" style="color:#1a73e8;font-size:12px;">Source {i+2}</a>'
@@ -178,13 +308,18 @@ def news_card(lead, dupes):
         dupes_html = f"""<p style="margin:8px 0 0 0;font-size:12px;color:#888;">
             📎 Also reported: {" · ".join(sources)} (consolidated into this alert)</p>"""
 
+    # RAG context badge (show when alert was enriched with RAG)
+    rag_badge = ""
+    if lead.get("_rag_enriched"):
+        rag_badge = """<span style="background:#e8f5e9;border-radius:4px;padding:2px 6px;font-size:11px;color:#2e7d32;margin-left:4px;">🧠 AI-enriched</span>"""
+
     return f"""
     <div style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:20px;margin-bottom:16px;">
       <div style="margin-bottom:8px;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">
         <span style="font-size:16px;">{emoji}</span>
         <span style="background:#f0f0f0;border-radius:4px;padding:2px 8px;font-size:12px;font-weight:600;color:#444;">{label}</span>
         <span style="background:#e8f4fd;border-radius:4px;padding:2px 8px;font-size:12px;color:#1a73e8;text-transform:uppercase;">{cat}</span>
-        {price_html}
+        {price_html}{rag_badge}
       </div>
       <h3 style="margin:0 0 4px 0;font-size:15px;"><a href="{url}" style="color:#1a73e8;text-decoration:none;">{title}</a></h3>
       <p style="margin:0 0 10px 0;font-size:12px;color:#888;">{meta}</p>
@@ -205,7 +340,7 @@ def trial_card(t):
     fp_date    = t.get("first_post_date","")
     lu_date    = t.get("last_update_date","")
     url        = f"https://clinicaltrials.gov/study/{nct}"
-    badge      = "✨ NEW TRIAL" if is_new else "🔄 UPDATED"
+    badge      = "NEW TRIAL" if is_new else "UPDATED"
     badge_color= "#27ae60" if is_new else "#e67e22"
     st_emoji   = STATUS_EMOJI.get(status, "🔘")
     price_info = get_share_price(sponsor)
@@ -234,7 +369,7 @@ def build_email_html(groups, trials, today):
     if groups:
         total_events = len(groups)
         total_articles = sum(1 + len(d) for lead, d in groups)
-        dedup_note = f" ({total_articles} articles → {total_events} unique events)" if total_articles > total_events else ""
+        dedup_note = f" ({total_articles} articles -> {total_events} unique events)" if total_articles > total_events else ""
         sections += f"<h2 style='color:#1a1a1a;font-size:18px;margin:20px 0 12px 0;'>📰 News Alerts ({total_events}{dedup_note})</h2>"
         sections += "".join(news_card(lead, dupes) for lead, dupes in groups)
     if trials:
@@ -249,12 +384,12 @@ def build_email_html(groups, trials, today):
       </div>
       <div style="background:#f5f5f5;padding:20px;">{sections}</div>
       <div style="text-align:center;padding:16px;font-size:12px;color:#999;">
-        Automated monitoring · Share prices from Yahoo Finance
+        Automated monitoring · Share prices from Yahoo Finance · Intelligence powered by Jina AI + Groq
       </div>
     </div></body></html>"""
 
 def build_email_plain(groups, trials, today):
-    lines = [f"PHARMA INTELLIGENCE MONITOR — {today}", "="*60]
+    lines = [f"PHARMA INTELLIGENCE MONITOR -- {today}", "="*60]
     if groups:
         lines.append(f"\nNEWS ALERTS ({len(groups)} unique events)")
         for i, (lead, dupes) in enumerate(groups, 1):
@@ -264,6 +399,7 @@ def build_email_plain(groups, trials, today):
                 f"\n[{i}] Score {lead.get('relevance_score')}/10 | {(lead.get('category') or '').upper()} | {lead.get('product_name','')} ({lead.get('company','')}){price_str}",
                 f"    {lead.get('catchy_title') or lead.get('raw_title','')}",
                 f"    {lead.get('summary','')[:200]}",
+                f"    Alert: {lead.get('alert_text','')[:200]}",
                 f"    {lead.get('url','')}",
             ]
             if dupes:
@@ -287,7 +423,7 @@ def send_email(groups, trials):
     parts = []
     if groups:  parts.append(f"{len(groups)} news")
     if trials:  parts.append(f"{len(trials)} trial update{'s' if len(trials)!=1 else ''}")
-    subject = f"[Pharma Alert] {' + '.join(parts)} — {datetime.utcnow().strftime('%b %d')}"
+    subject = f"[Pharma Alert] {' + '.join(parts)} -- {datetime.utcnow().strftime('%b %d')}"
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"]    = f"Pharma Monitor <{GMAIL_USER}>"
@@ -297,14 +433,14 @@ def send_email(groups, trials):
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as srv:
         srv.login(GMAIL_USER, GMAIL_PASS)
         srv.sendmail(GMAIL_USER, ALERT_TO, msg.as_string())
-    print(f"[OK] Email sent → {ALERT_TO} | {subject}")
+    print(f"[OK] Email sent -> {ALERT_TO} | {subject}")
     return True
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", default="news", choices=["news","trials","all"])
     args = parser.parse_args()
-    print(f"=== Email Alerts v2 ({args.source}) ===")
+    print(f"=== Email Alerts v3 RAG ({args.source}) ===")
 
     raw_news, trials = [], []
 
@@ -332,7 +468,24 @@ def main():
     # Deduplicate news alerts
     print("Deduplicating news alerts...")
     groups = deduplicate_alerts(raw_news)
-    print(f"After dedup: {len(raw_news)} articles → {len(groups)} unique events")
+    print(f"After dedup: {len(raw_news)} articles -> {len(groups)} unique events")
+
+    # RAG enrichment: enrich alert_text for score >= 7 articles
+    if JINA_API_KEY:
+        print("Enriching alerts with RAG context...")
+        for lead, _ in groups:
+            score = lead.get("relevance_score") or 0
+            if score >= 7:
+                rag_ctx = get_rag_context(lead)
+                if rag_ctx:
+                    enriched = generate_enriched_alert(lead, rag_ctx)
+                    if enriched:
+                        lead["alert_text"] = enriched
+                        lead["_rag_enriched"] = True
+                        print(f"  OK RAG-enriched: {(lead.get('catchy_title') or lead.get('raw_title','?'))[:50]}")
+                time.sleep(0.5)
+    else:
+        print("  JINA_API_KEY not set -- skipping RAG enrichment")
 
     if send_email(groups, trials):
         if raw_news:

@@ -20,6 +20,7 @@ jobs:
       SUPABASE_URL: https://ijunshkmqdqhdeivcjze.supabase.co
       SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
       GROQ_KEY: ${{ secrets.GROQ_KEY }}
+      JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
       NEO4J_URI: neo4j+s://e56a592d.databases.neo4j.io
       NEO4J_USER: ${{ secrets.NEO4J_USER }}
       NEO4J_PASS: ${{ secrets.NEO4J_PASS }}
@@ -43,7 +44,7 @@ jobs:
           DAYS=${{ github.event.inputs.days_back || '2' }}
           python src/fetcher.py --days $DAYS
 
-      - name: Step 1b — Fetch company press releases (SEC EDGAR + GlobeNewswire)
+      - name: Step 1b — Fetch company press releases (Jina.ai direct scraping)
         run: python src/press_release_scraper.py --days 7
         continue-on-error: true
 
@@ -54,11 +55,19 @@ jobs:
       - name: Step 3 — LLM Process (classify, summarize, score, alert)
         run: python src/processor.py
 
+      - name: Step 3b — Embed articles (Jina AI vector embeddings)
+        run: python src/embed_articles.py
+        continue-on-error: true
+
+      - name: Step 3c — Update wiki pages (Karpathy living knowledge base)
+        run: python src/wiki_updater.py
+        continue-on-error: true
+
       - name: Step 4 — Sync to Neo4j knowledge graph
         run: python src/load_neo4j.py
         continue-on-error: true
 
-      - name: Step 5 — Send email alerts (score ≥ 7, unsent)
+      - name: Step 5 — Send email alerts (score >= 7, RAG-enriched)
         run: python src/email_alerts.py
         continue-on-error: true
 

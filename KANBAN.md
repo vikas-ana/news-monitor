@@ -1,5 +1,21 @@
 # Project Kanban — Pharma News Monitor
 
+## RAG + Wiki Intelligence Layer (2026-04-07)
+
+| Date Started | Task | Status | Date Done |
+|---|---|---|---|
+| 2026-04-07 | `migrations/002_pgvector_wiki.sql` — pgvector + wiki_pages table + match_articles/match_wiki RPC functions | ⚠️ TODO (run once in Supabase SQL editor) | — |
+| 2026-04-07 | `src/seed_wiki.py` — seed 22 drug + 4 indication + 8 company wiki pages | ⚠️ TODO (run once: `SUPABASE_KEY=... python src/seed_wiki.py`) | — |
+| 2026-04-07 | `src/embed_articles.py` — Jina AI embeddings for articles + wiki pages (768-dim) | ✅ Done | 2026-04-07 |
+| 2026-04-07 | `src/wiki_updater.py` — Karpathy living wiki: LLM updates "Recent Developments" per article | ✅ Done | 2026-04-07 |
+| 2026-04-07 | `src/email_alerts.py` v3 — RAG-enriched alerts via Jina embed + pgvector similarity + Groq | ✅ Done | 2026-04-07 |
+| 2026-04-07 | `.github/workflows/fetch-news.yml` — added embed + wiki_updater steps to pipeline | ✅ Done | 2026-04-07 |
+| 2026-04-07 | Add `JINA_API_KEY` as GitHub Actions secret (Settings > Secrets > Actions) | ⚠️ TODO | — |
+
+---
+
+## Full Task History
+
 | Date Started | Task | Status | Date Done |
 |---|---|---|---|
 | 2026-04-05 | Set up GitHub repo (`vikas-ana/news-monitor`) | ✅ Done | 2026-04-05 |
@@ -34,7 +50,7 @@
 
 ---
 
-**Legend:** ✅ Done · 🔄 Ongoing · ⏳ Pending  
+**Legend:** ✅ Done · 🔄 Ongoing · ⏳ Pending · ⚠️ Action required
 **Last updated:** 2026-04-07
 
 ## Press Release Sources (v5)
