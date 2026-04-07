@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-Backfill full_content for articles where it's empty.
-Step 1: Try to fetch article URL → strip HTML → store if > 300 chars
-Step 2: If paywalled/failed → Groq 70B expands title+summary into full write-up
+Backfill full_content — original text only, no AI generation.
+Step 1: Direct URL scrape (works for Reuters, FiercePharma, BioPharma Dive, FDA, EMA, press releases)
+Step 2: Google Cache fallback (bypasses some soft paywalls)
+Step 3: If both fail → keep existing RSS snippet (already stored, just short)
 """
 
 import os, json, subprocess, time, re
@@ -10,9 +11,6 @@ from datetime import datetime, timezone
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_KEY"]
-GROQ_KEY     = os.environ.get("GROQ_KEY", "")
-
-GROQ_MODELS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it"]
 
 def supa_get(params):
     cmd = ["curl", "-s", "--max-time", "20",
@@ -32,108 +30,87 @@ def supa_patch(record_id, data):
         "-H", "Prefer: return=minimal",
         "-d", json.dumps(data)], capture_output=True)
 
-def fetch_url_content(url):
-    """Fetch URL, strip HTML, return clean text or None if < 300 chars."""
-    if not url: return None
-    r = subprocess.run(
-        ["curl", "-s", "--max-time", "15", "-L",
-         "-A", "Mozilla/5.0 (compatible; news-monitor/1.0)",
-         url],
-        capture_output=True, text=True)
-    html = r.stdout
-    if not html or len(html) < 100: return None
-    # Strip scripts, styles, tags
+def extract_text(html):
+    """Strip HTML tags and return clean readable text."""
+    if not html: return ""
     text = re.sub(r'<script[^>]*>.*?</script>', ' ', html, flags=re.DOTALL|re.IGNORECASE)
-    text = re.sub(r'<style[^>]*>.*?</style>', ' ', text, flags=re.DOTALL|re.IGNORECASE)
+    text = re.sub(r'<style[^>]*>.*?</style>',  ' ', text, flags=re.DOTALL|re.IGNORECASE)
     text = re.sub(r'<[^>]+>', ' ', text)
-    text = re.sub(r'&[a-z]+;', ' ', text)
+    text = re.sub(r'&nbsp;', ' ', text)
+    text = re.sub(r'&[a-z]+;', '', text)
     text = re.sub(r'\s+', ' ', text).strip()
-    # Remove boilerplate-heavy sections (nav, footer patterns)
-    text = re.sub(r'(cookie|privacy policy|terms of use|subscribe|sign in|log in).{0,100}', ' ', text, flags=re.IGNORECASE)
-    # Keep only meaningful portion
-    text = text[:6000].strip()
-    return text if len(text) > 300 else None
+    return text[:8000]
 
-def groq_expand(title, summary, indication, product, company):
-    """Use Groq 70B to write a detailed article from title+summary."""
-    if not GROQ_KEY: return None
-    context = f"Drug: {product or 'unknown'} | Company: {company or 'unknown'} | Indication: {indication or 'unknown'}"
-    prompt = (
-        f"You are a pharma journalist. Write a detailed 5-sentence article based ONLY on the information provided below. "
-        f"Do not invent clinical data, trial results, or figures. Stick strictly to what's stated.\n\n"
-        f"Context: {context}\n"
-        f"Headline: {title}\n"
-        f"Summary: {summary}\n\n"
-        f"Write the article:"
-    )
-    for model in GROQ_MODELS:
-        payload = json.dumps({
-            "model": model, "max_tokens": 400, "temperature": 0.1,
-            "messages": [{"role": "user", "content": prompt}]
-        })
-        r = subprocess.run(["curl", "-s", "--max-time", "30",
-            "https://api.groq.com/openai/v1/chat/completions",
-            "-H", f"Authorization: Bearer {GROQ_KEY}",
-            "-H", "Content-Type: application/json",
-            "-d", payload], capture_output=True, text=True)
-        try:
-            d = json.loads(r.stdout)
-            if "choices" in d:
-                time.sleep(1)
-                return "[AI-expanded from headline+summary]\n\n" + d["choices"][0]["message"]["content"].strip()
-            if (d.get("error",{}).get("code") == "rate_limit_exceeded"):
-                time.sleep(3); continue
-        except: continue
-    return None
+def fetch_direct(url):
+    """Fetch article URL directly."""
+    r = subprocess.run(
+        ["curl", "-s", "--max-time", "20", "-L",
+         "-A", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+         "--compressed", url],
+        capture_output=True, text=True)
+    text = extract_text(r.stdout)
+    return text if len(text) > 400 else None
+
+def fetch_google_cache(url):
+    """Try Google Cache — works for some soft-paywalled sites."""
+    cache_url = f"https://webcache.googleusercontent.com/search?q=cache:{url}"
+    r = subprocess.run(
+        ["curl", "-s", "--max-time", "20", "-L",
+         "-A", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+         cache_url],
+        capture_output=True, text=True)
+    if "did not match any documents" in r.stdout or len(r.stdout) < 500:
+        return None
+    text = extract_text(r.stdout)
+    return text if len(text) > 400 else None
 
 def main():
-    print(f"\n=== Content Backfill — {datetime.now().strftime('%Y-%m-%d %H:%M UTC')} ===")
+    print(f"\n=== Content Backfill (original text only) — {datetime.now().strftime('%Y-%m-%d %H:%M UTC')} ===")
 
-    # Fetch articles with empty full_content (processed ones only)
+    # Target: processed articles where full_content is still the short RSS snippet (< 500 chars)
     articles = supa_get(
-        "select=id,url,raw_title,catchy_title,summary,indication,product_name,company"
-        "&full_content=is.null&processed_at=not.is.null&limit=100&order=id.desc"
+        "select=id,url,raw_title,full_content"
+        "&processed_at=not.is.null"
+        "&order=id.desc&limit=100"
     )
-    print(f"Articles needing content: {len(articles)}")
-    if not articles:
-        print("All articles have content.")
+    # Filter to those with short/missing content
+    to_fill = [a for a in articles if len(a.get("full_content") or "") < 500]
+    print(f"Articles with short/missing content: {len(to_fill)}")
+    if not to_fill:
+        print("All articles have full content.")
         return
 
-    scraped = expanded = failed = 0
-    for i, a in enumerate(articles):
+    direct_ok = cache_ok = kept_snippet = 0
+    for i, a in enumerate(to_fill):
         aid   = a["id"]
-        title = a.get("catchy_title") or a.get("raw_title") or ""
         url   = a.get("url", "")
-        print(f"\n[{i+1}/{len(articles)}] {title[:60]}")
+        title = a.get("raw_title", "")[:60]
+        print(f"\n[{i+1}/{len(to_fill)}] {title}")
 
-        # Step 1: Try scraping
-        content = fetch_url_content(url)
+        # Step 1: Direct scrape
+        content = fetch_direct(url)
         if content:
             supa_patch(aid, {"full_content": content})
-            scraped += 1
-            print(f"  ✅ Scraped ({len(content)} chars)")
+            direct_ok += 1
+            print(f"  ✅ Direct scrape ({len(content)} chars)")
+            time.sleep(0.3)
+            continue
+
+        # Step 2: Google Cache
+        print(f"  ⚠️  Direct failed → trying Google Cache")
+        content = fetch_google_cache(url)
+        if content:
+            supa_patch(aid, {"full_content": content})
+            cache_ok += 1
+            print(f"  ✅ Google Cache ({len(content)} chars)")
             time.sleep(0.5)
             continue
 
-        # Step 2: Groq expansion
-        print(f"  ⚠️  URL fetch failed/paywalled → Groq expand")
-        content = groq_expand(
-            title,
-            a.get("summary", ""),
-            a.get("indication", ""),
-            a.get("product_name", ""),
-            a.get("company", "")
-        )
-        if content:
-            supa_patch(aid, {"full_content": content})
-            expanded += 1
-            print(f"  ✅ Groq-expanded ({len(content)} chars)")
-            time.sleep(1)
-        else:
-            failed += 1
-            print(f"  ❌ Failed")
+        # Step 3: Keep RSS snippet as-is (don't overwrite with AI)
+        kept_snippet += 1
+        print(f"  📎 Paywalled — keeping RSS snippet")
 
-    print(f"\n=== Done: Scraped {scraped} | Groq-expanded {expanded} | Failed {failed} ===")
+    print(f"\n=== Done: Direct {direct_ok} | Google Cache {cache_ok} | Kept snippet {kept_snippet} ===")
 
 if __name__ == "__main__":
     main()
