@@ -38,10 +38,14 @@ jobs:
       - name: Install dependencies
         run: pip install neo4j
 
-      - name: Step 1 — Fetch news
+      - name: Step 1a — Fetch news (RSS feeds)
         run: |
           DAYS=${{ github.event.inputs.days_back || '2' }}
           python src/fetcher.py --days $DAYS
+
+      - name: Step 1b — Fetch company press releases (SEC EDGAR + GlobeNewswire)
+        run: python src/press_release_scraper.py --days 7
+        continue-on-error: true
 
       - name: Step 2 — Fetch full article content (scrape + Groq expand)
         run: python src/backfill_content.py
