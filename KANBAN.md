@@ -1,5 +1,5 @@
 # Project Kanban — Pharma News Monitor
-**Last updated:** 2026-04-09 08:19 UTC
+**Last updated:** 2026-04-09 UTC
 
 ---
 
@@ -8,10 +8,36 @@
 | Task | Notes |
 |------|-------|
 | Load drug profiles + SWOT CSV into Neo4j | Needed for full COMPETES_WITH + SWOT context in alerts |
-| Email alerts for clinical trial changes (`--source trials`) | `trials_monitor.py` runs but trial alerts not yet emailed |
+| Email alerts for clinical trial changes (`--source trials`) | Trial alerts disabled pending v3 data-quality verification |
 | Set `ANTHROPIC_KEY` GitHub secret | For Claude Haiku fallback if Groq rate-limited |
+| Fix `load_neo4j.py` intermittent failure | GitHub Actions run 24184780165 failed on "Load knowledge graph" step |
 | Web dashboard — read-only UI to browse articles + trials | Nice-to-have |
 | User feedback loop — thumbs up/down on alerts | Improve scoring over time |
+
+---
+
+## 🔄 In Progress
+
+| Task | Notes |
+|------|-------|
+| Trials monitor v3 — stabilise and re-enable alerts | v3 rewritten (today-only, version-diff, LLM-judged, no history API fallback); trial alerts disabled until verified |
+
+---
+
+## ✅ Done — Trials Monitor v3 + Alert Quality (2026-04-09)
+
+| Date | Task |
+|------|------|
+| 2026-04-09 | `trials_monitor.py` v3 — today-only fetching, version-diff change detection, LLM-judged relevance ✅ |
+| 2026-04-09 | Remove CT.gov history API calls (were returning 404 — endpoint does not exist) ✅ |
+| 2026-04-09 | Move DB cleanup to `--cleanup` flag (no longer runs on every scheduled job) ✅ |
+| 2026-04-09 | Disable trial email alerts until v3 data quality verified ✅ |
+| 2026-04-09 | Fix dedup — extend to 7-day window at drug level (was missing cross-day same-story duplicates) ✅ |
+| 2026-04-09 | Restore rich flowing alert format (revert from short-bullet experiment) ✅ |
+| 2026-04-09 | Add share price to alert prompts (Yahoo Finance data injected into Groq context) ✅ |
+| 2026-04-09 | Fix Crohn's science article filter (basic-science articles now filtered out) ✅ |
+| 2026-04-09 | Strengthen FORMAT_PROMPT prose instruction + increase `max_tokens` to 1000 ✅ |
+| 2026-04-09 | One-off comparison run: Version A (RAG+Neo4j) vs Version B (RAG+Neo4j+Wiki) ✅ |
 
 ---
 
@@ -64,13 +90,21 @@
 ## Pipeline Architecture (current)
 
 ```
-Press release websites (Jina.ai × 13) + Google News RSS + FDA/EMA
-  → processor.py        [article-only context — runs on all 50 articles/day]
+Press release websites (Jina.ai × 15) + Google News RSS + FDA/EMA
+  → processor.py        [article-only context — runs on all ~50 articles/day]
   → embed_articles.py   [Jina 768-dim vectors → pgvector]
   → wiki_updater.py     [Karpathy wiki — LLM appends to living drug/indication/company pages]
   → load_neo4j.py       [MERGE drugs, articles, COMPETES_WITH edges]
   → email_alerts.py     [full context: RAG + wiki + Neo4j → Groq → Gmail]
 ```
+
+## Database Stats (as of 2026-04-09)
+
+| Table | Row count |
+|-------|-----------|
+| articles | 23 |
+| wiki_pages | 43 |
+| clinical_trials | 0 (v3 rebuild in progress) |
 
 ## Token Budget
 
@@ -85,7 +119,7 @@ Jina embeddings: ~360K tokens/month (36% of 1M free tier). **Total cost: $0/mont
 
 ---
 
-## Press Release Coverage (13 companies, Jina.ai)
+## Press Release Coverage (15 companies, Jina.ai)
 
 | Company | Source |
 |---------|--------|
@@ -101,6 +135,8 @@ Jina embeddings: ~360K tokens/month (36% of 1M free tier). **Total cost: $0/mont
 | Pfizer | pfizer.com/news/press-releases |
 | UCB | ucb.com/newsroom |
 | J&J | jnj.com/latest-news |
+| Novartis | novartis.com/news/media-releases |
+| Merck | merck.com/news/all-news/ |
 | Eli Lilly | investor.lilly.com/rss + Jina |
 
 ---

@@ -14,13 +14,13 @@ Runs entirely **free** on GitHub Actions + Supabase + Groq + Jina AI.
 |--------|-----------|--------|
 | Google News RSS (4 indications) | 3× daily | Scored + summarised articles in Supabase |
 | FDA / EMA RSS | 3× daily | Regulatory & company news |
-| Company press release websites (13 companies, Jina.ai) | 3× daily | Full original press release text, Cloudflare-bypassed |
+| Company press release websites (15 companies, Jina.ai) | 3× daily | Full original press release text, Cloudflare-bypassed |
 | ClinicalTrials.gov API | Every 15 min (8–11am UTC) | New trials + change detection |
 
 Email alerts sent to `vikassharma58@gmail.com` for:
 - News relevance score ≥ 7 (with RAG-enriched competitive context)
 - Auto-triggers: new Phase 3, FDA/EMA safety warning, product launch
-- New trial posted or trial status/design change
+- New trial posted or trial status/design change _(trial alerts temporarily disabled pending v3 data-quality verification)_
 
 ---
 
@@ -91,7 +91,7 @@ Each major drug, indication, and company has a **living wiki page** in Supabase 
 
 | Entity type | Count | Examples |
 |-------------|-------|---------|
-| Drug | 21 | Rinvoq, Skyrizi, Humira, Sotyktu, Bimzelx, Duvakitug, Taltz, Entyvio… |
+| Drug | 22 | Rinvoq, Skyrizi, Humira, Sotyktu, Bimzelx, Duvakitug, Taltz, Entyvio… |
 | Indication | 4 | RA, Psoriasis/PsA, Crohn's Disease, Ulcerative Colitis |
 | Company | 15 | AbbVie, BMS, UCB, Lilly, Sanofi, Takeda, J&J, Merck, Novartis, AZ, GSK, Amgen, Roche, Regeneron, BI |
 | Landscape | 2 | MOA Landscape (18 MOA classes), Strategic Watch List 2025-27 |
@@ -266,7 +266,7 @@ Filter: sponsor OR collaborator class = `INDUSTRY` only.
 | `load_docx_wiki.py` | One-time: load competitive report docx → 9 company + landscape wiki pages |
 | `load_neo4j.py` | Sync Supabase → Neo4j knowledge graph (MERGE, idempotent) |
 | `email_alerts.py` | Deduplicate + RAG-enrich alerts + share price + send Gmail |
-| `trials_monitor.py` | ClinicalTrials.gov — new trials + change detection |
+| `trials_monitor.py` | ClinicalTrials.gov — new trials + change detection (v3: today-only, version-diff, LLM-judged) |
 
 ---
 
