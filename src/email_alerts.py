@@ -280,6 +280,9 @@ def generate_enriched_alert(article, rag_context, neo4j_context=""):
     ind     = article.get("indication") or ""
     existing_alert = article.get("alert_text") or ""
 
+    rag_section    = ("KNOWLEDGE BASE (wiki + similar articles):\n" + rag_context[:1200]) if rag_context else ""
+    neo4j_section  = ("COMPETITIVE LANDSCAPE (Neo4j knowledge graph):\n" + neo4j_context[:800]) if neo4j_context else ""
+
     prompt = f"""You are a pharma intelligence analyst generating competitive intelligence alerts.
 
 ARTICLE:
@@ -288,9 +291,9 @@ Drug: {drug} | Company: {company} | Indication: {ind} | Score: {score}/10
 Summary: {summary[:600]}
 Existing alert: {existing_alert[:300]}
 
-{("KNOWLEDGE BASE (wiki + similar articles):\n" + rag_context[:1200]) if rag_context else ""}
+{rag_section}
 
-{("COMPETITIVE LANDSCAPE (Neo4j knowledge graph):\n" + neo4j_context[:800]) if neo4j_context else ""}
+{neo4j_section}
 
 Write a concise alert (2-3 sentences) covering:
 1. What happened and why it matters competitively
