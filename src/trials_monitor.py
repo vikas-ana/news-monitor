@@ -177,66 +177,13 @@ def fetch_updated_today(ind_key, condition_str):
 
     return results
 
-# ── CT.gov API: version history + versioned fetch ─────────────────────────────
+# ── CT.gov version history ────────────────────────────────────────────────────
+# NOTE: CT.gov does not expose a REST endpoint for version history or versioned
+# study fetches. The side-by-side comparison shown at
+#   clinicaltrials.gov/study/{nct_id}?tab=history
+# is browser-rendered only. All version diffing is done by comparing the
+# current API response against our stored Supabase snapshot.
 
-def get_version_history(nct_id):
-    """
-    Returns list of version dicts from CT.gov history API.
-    Each item has at least a version number and date.
-    CT.gov returns: [{"version": N, "date": "YYYY-MM-DD", ...}, ...]
-    """
-    url  = f"{CT_API}/studies/{nct_id}/history"
-    data = curl_get(url, timeout=20)
-
-    # API returns different shapes — normalise to list
-    if isinstance(data, list):
-        history = data
-    else:
-        # try common envelope keys
-        for key in ("studies", "changes", "versions", "history"):
-            if key in data and isinstance(data[key], list):
-                history = data[key]
-                break
-        else:
-            history = []
-
-    # Normalise version number field name
-    normalised = []
-    for item in history:
-        vnum = item.get("version") or item.get("versionNumber") or item.get("ver")
-        vdate = item.get("date") or item.get("postDate") or ""
-        if vnum is not None:
-            normalised.append({"version": int(vnum), "date": vdate})
-
-    return sorted(normalised, key=lambda x: x["version"])
-
-def fetch_version(nct_id, version_number):
-    """Fetch a specific historical version of a trial from CT.gov."""
-    # CT.gov v2 API supports ?historicVersion=N
-    url  = f"{CT_API}/studies/{nct_id}?historicVersion={version_number}"
-    data = curl_get(url, timeout=20)
-    if data.get("protocolSection"):
-        return data
-    # Fallback: try the plain endpoint (returns current)
-    return None
-
-# ── Diff two parsed versions ──────────────────────────────────────────────────
-
-def diff_versions(old_rec, new_rec):
-    """
-    Compare alert-relevant fields between two parsed study records.
-    Returns list of human-readable change strings.
-    """
-    changes = []
-    for field, label in ALERT_FIELDS.items():
-        old_val = str(old_rec.get(field) or "")
-        new_val = str(new_rec.get(field) or "")
-        if old_val != new_val:
-            if "hash" in field:
-                changes.append(f"{label}: content changed")
-            else:
-                changes.append(f"{label}: '{old_val}' → '{new_val}'")
-    return changes
 
 # ── LLM: is this diff alert-worthy? ──────────────────────────────────────────
 
@@ -433,46 +380,18 @@ def main():
 
             else:
                 # ── UPDATED TRIAL ──────────────────────────────────────────
-                # Step 1: get version history from CT.gov
-                history = get_version_history(nct)
-                time.sleep(0.3)
-
+                # Diff current API response against our stored Supabase snapshot.
+                # CT.gov has no REST endpoint for version history — the web UI
+                # side-by-side view is browser-rendered only.
                 changes = []
+                for field, label in ALERT_FIELDS.items():
+                    ov = str(stored[nct].get(field) or "")
+                    nv = str(rec.get(field) or "")
+                    if ov != nv:
+                        changes.append(f"{label}: '{ov}' → '{nv}'")
 
-                if len(history) >= 2:
-                    v_prev = history[-2]["version"]
-                    v_curr = history[-1]["version"]
-                    print(f"  🔍 {nct}: versions {v_prev} → {v_curr} "
-                          f"(updated {rec['last_update_date']})")
-
-                    old_data = fetch_version(nct, v_prev)
-                    time.sleep(0.3)
-                    new_data = fetch_version(nct, v_curr)
-                    time.sleep(0.3)
-
-                    if old_data and new_data:
-                        old_parsed = parse_study(old_data, ind_key)
-                        new_parsed = parse_study(new_data, ind_key)
-                        changes    = diff_versions(old_parsed, new_parsed)
-                        print(f"       Version diff: {len(changes)} field(s) changed")
-                    else:
-                        # Versioned fetch failed — fall back to comparing against DB
-                        print(f"       Version fetch failed — using DB diff")
-                        for field, label in ALERT_FIELDS.items():
-                            ov = str(stored[nct].get(field) or "")
-                            nv = str(rec.get(field) or "")
-                            if ov != nv:
-                                changes.append(f"{label}: '{ov}' → '{nv}'")
-                else:
-                    # No history available (e.g. single-version trial)
-                    for field, label in ALERT_FIELDS.items():
-                        ov = str(stored[nct].get(field) or "")
-                        nv = str(rec.get(field) or "")
-                        if ov != nv:
-                            changes.append(f"{label}: '{ov}' → '{nv}'")
-                    if changes:
-                        print(f"  🔍 {nct}: no history API — DB diff shows "
-                              f"{len(changes)} change(s)")
+                if changes:
+                    print(f"  🔍 {nct}: {len(changes)} field(s) changed vs stored snapshot")
 
                 if not changes:
                     # Nothing changed in alert fields (e.g. only text/contact update)
