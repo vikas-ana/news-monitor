@@ -86,7 +86,11 @@ def groq(prompt, max_tokens=600):
     try:
         d = json.loads(r.stdout)
         if "choices" in d: return d["choices"][0]["message"]["content"].strip()
-    except: pass
+        # Log Groq errors so they show in workflow logs
+        if "error" in d:
+            print(f"  ⚠️  Groq error: {d['error'].get('message','unknown')[:120]}")
+    except Exception as e:
+        print(f"  ⚠️  Groq parse error: {e} | raw: {r.stdout[:200]}")
     return ""
 
 # ── Supabase helpers ──────────────────────────────────────────────────────────
@@ -470,7 +474,9 @@ def alert_card(text, label, badge_color, bg_color, border_color, company, date, 
     <a href="{url}" style="color:#1a73e8;font-size:11px;margin-left:auto;text-decoration:none">
       Source →</a>
   </div>
-  <div style="color:#222;font-size:13.5px;line-height:1.6">{md_to_html(text)}</div>
+  <div style="color:#222;font-size:13.5px;line-height:1.6">
+    {md_to_html(text) if text.strip() else '<p style="color:#c0392b;font-style:italic;">⚠️ Alert generation failed — Groq returned empty response. Check Actions logs.</p>'}
+  </div>
 </div>"""
 
 today = datetime.now().strftime("%d %b %Y")
