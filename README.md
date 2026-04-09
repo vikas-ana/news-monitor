@@ -242,6 +242,35 @@ decisions/
 KANBAN.md             # Project task board
 ```
 
+**How the process works**
+**Pipeline candidates — will we catch them?**
+
+**Yes, the RSS feeds are designed for this.** The indication feeds use broad OR queries:
+
+"rheumatoid arthritis" drug OR treatment OR trial OR approval OR FDA OR EMA
+
+This catches articles about **any drug** mentioned alongside the indication — including unknown pipeline assets you've never heard of. You don't need to know the drug name in advance.
+
+The keyword list (46 drugs, 12 companies) is only applied to direct_rss feeds (FDA, EMA, Merck) to reduce noise. The **Google News indication feeds accept everything** and let the LLM score it.
+
+**Search operators:** Pure **OR** within each clause. Google News RSS interprets drug OR treatment OR trial OR approval as OR — any one match qualifies. The indication name itself acts as the AND anchor (it's outside the OR group), so you get: "rheumatoid arthritis" AND (drug OR treatment OR trial OR...).
+
+The TL1A-specific feed (TL1A OR Tulisokibart OR Duvakitug) is a good example — added specifically because TL1A is an emerging class worth tracking before it has mainstream coverage.
+
+---
+
+## 4. Why three source types?
+
+**Each covers what the others miss:**
+
+| Source | What it uniquely catches |
+|--------|--------------------------|
+| **Google News RSS** | Secondary reporting — analyst takes, Reuters/Bloomberg, investor news, conference coverage. Broad indication sweeps catch unknown pipeline drugs. |
+| **FDA/EMA RSS** | Primary regulatory decisions — approval letters, safety alerts, label changes. Google News catches these too but with a lag. FDA RSS is same-day. |
+| **Company PR pages (Jina.ai)** | Full original press release text — Phase 3 results, trial initiations, earnings. Google News summarises these; company pages have the complete data tables, p-values, subgroup analyses. |
+
+Without PR pages you'd get "AbbVie reports positive Skyrizi results" (headline only). With PR pages you get the full 3,000-word press release with efficacy data. That's what processor.py needs to score and summarise accurately.
+
 ---
 
 ## Setup
