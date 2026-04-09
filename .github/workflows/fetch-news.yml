@@ -9,6 +9,10 @@ on:
         description: 'Days to backfill (default: 2)'
         required: false
         default: '2'
+      article_id:
+        description: 'Specific article ID to re-process as alert (optional, from dashboard)'
+        required: false
+        default: ''
 
 permissions:
   contents: write

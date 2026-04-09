@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pharma Intelligence Dashboard</title>
+<style>
+  :root {
+    --bg:           #faf8f4;
+    --surface:      #ffffff;
+    --surface-alt:  #fdf6ec;
+    --sage:         #6d9b78;
+    --sage-light:   #eaf2eb;
+    --sage-dark:    #4a7856;
+    --amber:        #c07c2a;
+    --amber-light:  #fef4e4;
+    --amber-dark:   #9a5f1a;
+    --slate:        #5e7a8a;
+    --slate-light:  #eaf0f4;
+    --text:         #2c2c2c;
+    --text-muted:   #6b6b6b;
+    --text-light:   #999;
+    --border:       #e6e2d9;
+    --border-light: #f0ece4;
+    --radius:       10px;
+    --shadow:       0 1px 4px rgba(0,0,0,0.06), 0 2px 12px rgba(0,0,0,0.04);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+         background: var(--bg); color: var(--text); line-height: 1.55; font-size: 14px; }
+
+  /* ── Header ── */
+  header { background: var(--surface); border-bottom: 1px solid var(--border);
+           padding: 16px 24px; display: flex; align-items: center; gap: 16px;
+           flex-wrap: wrap; position: sticky; top: 0; z-index: 100;
+           box-shadow: 0 1px 8px rgba(0,0,0,0.06); }
+  header h1 { font-size: 17px; font-weight: 700; color: var(--text); letter-spacing: -0.3px; }
+  header h1 span { color: var(--sage-dark); }
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; align-items: center; }
+  .filters select, .filters input {
+    border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px;
+    font-size: 13px; background: var(--bg); color: var(--text);
+    outline: none; cursor: pointer; }
+  .filters select:focus, .filters input:focus { border-color: var(--sage); }
+  .filter-btn { padding: 5px 14px; border-radius: 6px; border: none; cursor: pointer;
+                font-size: 13px; font-weight: 600; transition: all .15s; }
+  .filter-btn.active { background: var(--sage); color: #fff; }
+  .filter-btn:not(.active) { background: var(--bg); color: var(--text-muted);
+                              border: 1px solid var(--border); }
+  .filter-btn:hover:not(.active) { background: var(--sage-light); color: var(--sage-dark); }
+
+  /* ── Layout ── */
+  main { max-width: 900px; margin: 0 auto; padding: 24px 16px; }
+  .feed-header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .feed-header h2 { font-size: 13px; font-weight: 700; text-transform: uppercase;
+                    letter-spacing: .06em; color: var(--text-muted); }
+  .count-badge { background: var(--border-light); border-radius: 10px;
+                 padding: 2px 8px; font-size: 12px; color: var(--text-muted); }
+
+  /* ── Card ── */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+          padding: 18px 20px; margin-bottom: 12px; box-shadow: var(--shadow);
+          transition: box-shadow .15s; position: relative; overflow: hidden; }
+  .card:hover { box-shadow: 0 3px 16px rgba(0,0,0,0.09); }
+  .card.is-alert { background: var(--surface-alt); border-color: #e8c98a; }
+  .card.is-alert::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+                            width: 4px; background: var(--amber); border-radius: var(--radius) 0 0 var(--radius); }
+
+  /* Card top row */
+  .card-top { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .badge { display: inline-flex; align-items: center; gap: 4px; border-radius: 20px;
+           padding: 3px 10px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+  .badge-alert { background: var(--amber-light); color: var(--amber-dark); border: 1px solid #f0c97a; }
+  .badge-info  { background: var(--sage-light); color: var(--sage-dark); border: 1px solid #b8d9be; }
+  .badge-cat   { background: var(--slate-light); color: var(--slate); border: 1px solid #c6d8e2;
+                 text-transform: capitalize; }
+  .score-bar   { display: flex; align-items: center; gap: 5px; margin-left: auto; }
+  .score-pips  { display: flex; gap: 2px; }
+  .pip { width: 6px; height: 6px; border-radius: 2px; background: var(--border); }
+  .pip.on-high { background: var(--amber); }
+  .pip.on-mid  { background: var(--sage); }
+  .pip.on-low  { background: #b0b8aa; }
+  .score-num { font-size: 11px; color: var(--text-light); font-weight: 600; }
+
+  /* Title */
+  .card h3 { font-size: 15px; font-weight: 700; margin-bottom: 4px; line-height: 1.35; }
+  .card h3 a { color: var(--text); text-decoration: none; }
+  .card h3 a:hover { color: var(--sage-dark); text-decoration: underline; }
+
+  /* Meta */
+  .card-meta { font-size: 12px; color: var(--text-muted); margin-bottom: 10px;
+               display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .meta-sep { color: var(--border); }
+
+  /* Summary */
+  .summary { font-size: 13.5px; color: #444; line-height: 1.6; margin-bottom: 10px; }
+  .summary.clamped { display: -webkit-box; -webkit-line-clamp: 2;
+                     -webkit-box-orient: vertical; overflow: hidden; }
+  .expand-btn { font-size: 12px; color: var(--sage-dark); cursor: pointer;
+                background: none; border: none; padding: 0; font-weight: 600; }
+  .expand-btn:hover { text-decoration: underline; }
+
+  /* Alert text */
+  .alert-box { background: var(--amber-light); border: 1px solid #f0c97a;
+               border-radius: 6px; padding: 12px 14px; margin-bottom: 10px;
+               font-size: 13px; line-height: 1.6; color: #5a3a00; }
+  .alert-box strong { display: block; font-size: 11px; text-transform: uppercase;
+                      letter-spacing: .05em; color: var(--amber-dark); margin-bottom: 6px; }
+  /* Render markdown-style bold in alert text */
+  .alert-box b { color: #3a2200; }
+
+  /* Footer */
+  .card-footer { display: flex; align-items: center; gap: 8px; margin-top: 12px;
+                 padding-top: 10px; border-top: 1px solid var(--border-light); }
+  .thumb-btn { border: 1px solid var(--border); background: var(--bg); border-radius: 6px;
+               padding: 4px 10px; font-size: 13px; cursor: pointer; transition: all .15s;
+               color: var(--text-muted); display: flex; align-items: center; gap: 4px; }
+  .thumb-btn:hover:not(:disabled) { border-color: var(--sage); color: var(--sage-dark); background: var(--sage-light); }
+  .thumb-btn.voted-up   { background: var(--sage-light); border-color: var(--sage);
+                          color: var(--sage-dark); font-weight: 700; }
+  .thumb-btn.voted-down { background: #fce8e8; border-color: #d98080; color: #8b2020; font-weight: 700; }
+  .thumb-btn:disabled { opacity: .55; cursor: default; }
+
+  .trigger-btn { margin-left: auto; border: 1px solid var(--amber); background: var(--amber-light);
+                 color: var(--amber-dark); border-radius: 6px; padding: 4px 12px;
+                 font-size: 12px; font-weight: 700; cursor: pointer; transition: all .15s; }
+  .trigger-btn:hover:not(:disabled) { background: var(--amber); color: #fff; }
+  .trigger-btn.triggered { background: var(--sage-light); border-color: var(--sage);
+                           color: var(--sage-dark); cursor: default; }
+  .trigger-btn:disabled { opacity: .6; cursor: default; }
+
+  /* Load more */
+  #load-more { display: block; margin: 24px auto 0; padding: 10px 28px;
+               border: 1px solid var(--border); background: var(--surface); border-radius: 8px;
+               font-size: 14px; font-weight: 600; color: var(--text-muted); cursor: pointer; }
+  #load-more:hover { border-color: var(--sage); color: var(--sage-dark); background: var(--sage-light); }
+  #load-more:disabled { opacity: .4; cursor: default; }
+
+  /* Empty / loading states */
+  .state-msg { text-align: center; padding: 48px 24px; color: var(--text-muted); font-size: 14px; }
+  .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border);
+             border-top-color: var(--sage); border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Pharma <span>Intelligence</span></h1>
+  <div class="filters">
+    <select id="f-category">
+      <option value="">All categories</option>
+      <option value="approval">Approval</option>
+      <option value="trial">Trial</option>
+      <option value="pipeline">Pipeline</option>
+      <option value="earnings">Earnings</option>
+      <option value="safety">Safety</option>
+      <option value="regulatory">Regulatory</option>
+      <option value="deal">Deal / M&A</option>
+      <option value="launch">Launch</option>
+    </select>
+    <input id="f-company" type="text" placeholder="Company…" style="width:130px">
+    <input id="f-drug"    type="text" placeholder="Drug…"    style="width:110px">
+    <button class="filter-btn active" id="f-all"   onclick="setAlertFilter(null)">All</button>
+    <button class="filter-btn"        id="f-alerts" onclick="setAlertFilter(true)">🔔 Alerts only</button>
+  </div>
+</header>
+
+<main>
+  <div class="feed-header">
+    <h2>News Feed</h2>
+    <span class="count-badge" id="count-label">Loading…</span>
+  </div>
+  <div id="feed"></div>
+  <button id="load-more" style="display:none" onclick="loadMore()">Load more</button>
+</main>
+
+<script>
+const API = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://localhost:3000'   // local vercel dev
+  : '';                        // same origin on Vercel
+
+let page = 0, total = 0, loading = false, alertFilter = null;
+const voted  = new Set();   // article IDs already voted on
+const triggered = new Set(); // article IDs already triggered
+
+// ── Filters ──────────────────────────────────────────────────────────────────
+
+let debounceTimer;
+document.getElementById('f-category').addEventListener('change', reset);
+document.getElementById('f-company').addEventListener('input', () => { clearTimeout(debounceTimer); debounceTimer = setTimeout(reset, 400); });
+document.getElementById('f-drug').addEventListener('input',    () => { clearTimeout(debounceTimer); debounceTimer = setTimeout(reset, 400); });
+
+function setAlertFilter(v) {
+  alertFilter = v;
+  document.getElementById('f-all').classList.toggle('active', v === null);
+  document.getElementById('f-alerts').classList.toggle('active', v === true);
+  reset();
+}
+
+function reset() { page = 0; document.getElementById('feed').innerHTML = ''; loadFeed(); }
+
+// ── Fetch ─────────────────────────────────────────────────────────────────────
+
+async function loadFeed() {
+  if (loading) return;
+  loading = true;
+  const feed = document.getElementById('feed');
+  if (page === 0) feed.innerHTML = '<div class="state-msg"><span class="spinner"></span></div>';
+
+  const params = new URLSearchParams({ page, limit: 20 });
+  const cat  = document.getElementById('f-category').value;
+  const co   = document.getElementById('f-company').value.trim();
+  const drug = document.getElementById('f-drug').value.trim();
+  if (cat)  params.set('category', cat);
+  if (co)   params.set('company', co);
+  if (drug) params.set('drug', drug);
+  if (alertFilter !== null) params.set('is_alert', String(alertFilter));
+
+  try {
+    const r = await fetch(`${API}/api/articles?${params}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const { articles, total: t } = await r.json();
+    total = t;
+
+    if (page === 0) feed.innerHTML = '';
+    if (articles.length === 0 && page === 0) {
+      feed.innerHTML = '<div class="state-msg">No articles found for these filters.</div>';
+    } else {
+      articles.forEach(a => feed.appendChild(buildCard(a)));
+    }
+
+    document.getElementById('count-label').textContent = `${total} article${total !== 1 ? 's' : ''}`;
+    const btn = document.getElementById('load-more');
+    const shown = (page + 1) * 20;
+    btn.style.display = shown < total ? 'block' : 'none';
+    btn.disabled = false;
+
+  } catch (e) {
+    feed.innerHTML = `<div class="state-msg">Failed to load: ${e.message}</div>`;
+  }
+  loading = false;
+}
+
+function loadMore() {
+  page++;
+  document.getElementById('load-more').disabled = true;
+  loadFeed();
+}
+
+// ── Card ──────────────────────────────────────────────────────────────────────
+
+function buildCard(a) {
+  const isAlert = a.is_alert === true;
+  const score   = a.relevance_score || 0;
+  const title   = a.catchy_title || a.raw_title || 'Untitled';
+  const drug    = a.product_name || '';
+  const company = a.company || '';
+  const ind     = a.indication || '';
+  const cat     = a.category || '';
+  const date    = a.article_date ? new Date(a.article_date).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) : '';
+  const summary = a.summary || '';
+  const alertTxt = a.alert_text || '';
+  const url     = a.url || '#';
+  const id      = a.id;
+
+  // Score pips
+  const pipClass = score >= 8 ? 'on-high' : score >= 5 ? 'on-mid' : 'on-low';
+  const pips = Array.from({length:10}, (_,i) => `<span class="pip ${i < score ? pipClass : ''}"></span>`).join('');
+
+  // Alert text — render **bold** markers
+  const alertHtml = alertTxt ? alertTxt
+    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+    .replace(/\n/g, '<br>') : '';
+
+  const summaryId = `sum-${id}`;
+  const cardEl = document.createElement('div');
+  cardEl.className = `card${isAlert ? ' is-alert' : ''}`;
+  cardEl.innerHTML = `
+    <div class="card-top">
+      <span class="badge ${isAlert ? 'badge-alert' : 'badge-info'}">${isAlert ? '🔔 Alert' : '📋 Info'}</span>
+      ${cat ? `<span class="badge badge-cat">${cat}</span>` : ''}
+      <div class="score-bar">
+        <div class="score-pips">${pips}</div>
+        <span class="score-num">${score}/10</span>
+      </div>
+    </div>
+    <h3><a href="${url}" target="_blank" rel="noopener">${esc(title)}</a></h3>
+    <div class="card-meta">
+      ${drug    ? `<span>${esc(drug)}</span><span class="meta-sep">·</span>` : ''}
+      ${company ? `<span>${esc(company)}</span><span class="meta-sep">·</span>` : ''}
+      ${ind     ? `<span>${esc(ind)}</span><span class="meta-sep">·</span>` : ''}
+      ${date    ? `<span>${date}</span>` : ''}
+    </div>
+    ${summary ? `
+      <div class="summary clamped" id="${summaryId}">${esc(summary)}</div>
+      <button class="expand-btn" onclick="toggleSummary('${summaryId}', this)">Show more ▾</button>
+    ` : ''}
+    ${alertHtml ? `<div class="alert-box"><strong>Intelligence Alert</strong>${alertHtml}</div>` : ''}
+    <div class="card-footer">
+      <button class="thumb-btn" id="up-${id}"   onclick="vote(${id},'thumbs_up',this)"  title="Useful">👍</button>
+      <button class="thumb-btn" id="down-${id}" onclick="vote(${id},'thumbs_down',this)" title="Not useful">👎</button>
+      <button class="trigger-btn" id="trig-${id}" onclick="triggerAlert(${id},'${esc(title)}',this)">Request Alert →</button>
+    </div>`;
+  return cardEl;
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function toggleSummary(id, btn) {
+  const el = document.getElementById(id);
+  const clamped = el.classList.toggle('clamped');
+  btn.textContent = clamped ? 'Show more ▾' : 'Show less ▴';
+}
+
+// ── Actions ───────────────────────────────────────────────────────────────────
+
+async function vote(articleId, value, el) {
+  if (voted.has(articleId)) return;
+  voted.add(articleId);
+  const upBtn   = document.getElementById(`up-${articleId}`);
+  const downBtn = document.getElementById(`down-${articleId}`);
+  upBtn.disabled = downBtn.disabled = true;
+
+  try {
+    await fetch(`${API}/api/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ article_id: articleId, value }),
+    });
+    el.classList.add(value === 'thumbs_up' ? 'voted-up' : 'voted-down');
+  } catch (_) {
+    upBtn.disabled = downBtn.disabled = false;
+    voted.delete(articleId);
+  }
+}
+
+async function triggerAlert(articleId, title, btn) {
+  if (triggered.has(articleId)) return;
+  triggered.add(articleId);
+  btn.disabled = true;
+  btn.textContent = '⏳ Requesting…';
+
+  try {
+    const r = await fetch(`${API}/api/trigger-alert`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ article_id: articleId, title }),
+    });
+    const data = await r.json();
+    if (data.success) {
+      btn.textContent = '✓ Requested';
+      btn.classList.add('triggered');
+    } else {
+      btn.textContent = '✗ Failed';
+      btn.disabled = false;
+      triggered.delete(articleId);
+    }
+  } catch (_) {
+    btn.textContent = '✗ Failed';
+    btn.disabled = false;
+    triggered.delete(articleId);
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadFeed();
+</script>
+</body>
+</html>
