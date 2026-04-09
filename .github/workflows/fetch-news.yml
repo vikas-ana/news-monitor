@@ -59,7 +59,8 @@ jobs:
         run: python src/embed_articles.py
         continue-on-error: true
 
-      - name: Step 3c — Update wiki pages (Karpathy living knowledge base)
+      - name: Step 3c — Update wiki pages (Karpathy living knowledge base) [PAUSED]
+        if: false
         run: python src/wiki_updater.py
         continue-on-error: true
 
