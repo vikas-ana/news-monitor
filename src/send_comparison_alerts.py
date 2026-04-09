@@ -14,6 +14,52 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 
+# ── Share price ────────────────────────────────────────────────────────────────
+COMPANY_TICKER = {
+    "abbvie": "ABBV", "j&j": "JNJ", "janssen": "JNJ", "johnson & johnson": "JNJ",
+    "roche": "RHHBY", "novartis": "NVS", "bms": "BMY", "bristol-myers squibb": "BMY",
+    "eli lilly": "LLY", "lilly": "LLY", "sanofi": "SNY", "amgen": "AMGN",
+    "takeda": "TAK", "gilead": "GILD", "pfizer": "PFE", "astrazeneca": "AZN",
+    "merck": "MRK", "ucb": "UCB", "gsk": "GSK", "alumis": "ALMS",
+    "sun pharma": "SUNPHARMA.NS", "regeneron": "REGN", "biogen": "BIIB",
+}
+_price_cache = {}
+
+def get_share_price(company):
+    """Fetch current price + day % change from Yahoo Finance (free, no key)."""
+    if not company: return None
+    co_key = company.lower().strip()
+    ticker = COMPANY_TICKER.get(co_key)
+    if not ticker: return None
+    if ticker in _price_cache: return _price_cache[ticker]
+    try:
+        url = (f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
+               f"?range=2d&interval=1d")
+        r = subprocess.run(["curl", "-s", "--max-time", "10", url,
+                            "-H", "Accept: application/json"],
+                           capture_output=True, text=True)
+        data = json.loads(r.stdout)
+        result = data.get("chart", {}).get("result", [{}])[0]
+        meta   = result.get("meta", {})
+        price  = meta.get("regularMarketPrice")
+        prev   = meta.get("previousClose") or meta.get("chartPreviousClose")
+        if price and prev:
+            change_pct = ((price - prev) / prev) * 100
+            arrow = "▲" if change_pct >= 0 else "▼"
+            color = "#27ae60" if change_pct >= 0 else "#e74c3c"
+            info = {"ticker": ticker, "price": price, "change_pct": change_pct,
+                    "arrow": arrow, "color": color,
+                    "text": f"{ticker}: ${price:.2f} {arrow}{abs(change_pct):.1f}%",
+                    "html": (f"<span style='background:#f8f9fa;border:1px solid #dee2e6;"
+                             f"border-radius:4px;padding:2px 8px;font-size:12px'>"
+                             f"{ticker}: ${price:.2f} "
+                             f"<span style='color:{color}'>{arrow}{abs(change_pct):.1f}%</span>"
+                             f"</span>")}
+            _price_cache[ticker] = info
+            return info
+    except: pass
+    return None
+
 SUPA_URL   = os.environ["SUPABASE_URL"]
 SUPA_KEY   = os.environ["SUPABASE_KEY"]
 GROQ_KEY   = os.environ["GROQ_KEY"]
@@ -244,7 +290,7 @@ Rules:
 - No paragraphs anywhere
 """
 
-def generate_alert(article, rag_articles_ctx="", neo4j_ctx="", wiki_ctx=""):
+def generate_alert(article, rag_articles_ctx="", neo4j_ctx="", wiki_ctx="", price_info=None):
     drug    = article.get("product_name") or ""
     company = article.get("company") or ""
     ind     = article.get("indication") or ""
@@ -255,6 +301,10 @@ def generate_alert(article, rag_articles_ctx="", neo4j_ctx="", wiki_ctx=""):
     content = (article.get("full_content") or "")[:1200]
 
     ctx_block = ""
+    if price_info:
+        ctx_block += (f"\nMARKET DATA (at time of alert generation):\n"
+                      f"{company} stock ({price_info['ticker']}): "
+                      f"${price_info['price']:.2f} {price_info['arrow']}{abs(price_info['change_pct']):.1f}% today\n")
     if rag_articles_ctx:
         ctx_block += f"\nSIMILAR PAST ARTICLES (RAG):\n{rag_articles_ctx[:800]}\n"
     if neo4j_ctx:
@@ -316,6 +366,10 @@ for i, a in enumerate(selected):
     company = a.get("company") or ""
 
     # Shared context (both versions get this)
+    print("  Fetching share price...")
+    price_info = get_share_price(company)
+    if price_info:
+        print(f"  {price_info['text']}")
     print("  Fetching RAG past articles...")
     rag_ctx   = get_rag_articles(a)
     print("  Fetching Neo4j context...")
@@ -323,23 +377,24 @@ for i, a in enumerate(selected):
 
     # Version A: RAG + Neo4j, NO wiki
     print("  [A] Generating without wiki...")
-    alert_a = generate_alert(a, rag_ctx, neo4j_ctx, wiki_ctx="")
+    alert_a = generate_alert(a, rag_ctx, neo4j_ctx, wiki_ctx="", price_info=price_info)
     time.sleep(3)
 
     # Version B: RAG + Neo4j + Wiki
     print("  [B] Fetching wiki context...")
     wiki_ctx  = get_wiki_context(a)
     print("  [B] Generating with wiki...")
-    alert_b   = generate_alert(a, rag_ctx, neo4j_ctx, wiki_ctx)
+    alert_b   = generate_alert(a, rag_ctx, neo4j_ctx, wiki_ctx, price_info=price_info)
     time.sleep(3)
 
     results.append({
-        "article":  a,
+        "article":   a,
         "version_a": alert_a,
         "version_b": alert_b,
-        "rag_ctx":  rag_ctx,
+        "rag_ctx":   rag_ctx,
         "neo4j_ctx": neo4j_ctx,
-        "wiki_ctx": wiki_ctx,
+        "wiki_ctx":  wiki_ctx,
+        "price_info": price_info,
     })
     print("  Done.")
 
@@ -365,8 +420,13 @@ def md_to_html(text):
                   lambda m: f'<ul style="margin:4px 0 10px 18px;padding:0">{m.group(0)}</ul>', html)
     return html
 
-def alert_card(text, label, badge_color, bg_color, border_color, company, date, score, url):
+def alert_card(text, label, badge_color, bg_color, border_color, company, date, score, url, price_info=None):
     sc = SCORE_COLOR.get(score, "#7f8c8d")
+    price_html = ""
+    if price_info:
+        price_html = (f"<span style='background:#f8f9fa;border:1px solid #dee2e6;"
+                      f"border-radius:4px;padding:2px 7px;font-size:11px'>"
+                      f"{price_info['html']}</span>")
     return f"""
 <div style="background:{bg_color};border-left:5px solid {border_color};border-radius:8px;
      padding:18px 20px;font-family:Arial,sans-serif;height:100%;box-sizing:border-box;">
@@ -376,6 +436,7 @@ def alert_card(text, label, badge_color, bg_color, border_color, company, date, 
     <span style="background:{badge_color};color:#fff;padding:3px 9px;border-radius:10px;
           font-size:11px;font-weight:bold">{label}</span>
     <span style="color:#666;font-size:12px">{company} · {date}</span>
+    {price_html}
     <a href="{url}" style="color:#1a73e8;font-size:11px;margin-left:auto;text-decoration:none">
       Source →</a>
   </div>
@@ -393,14 +454,15 @@ for i, res in enumerate(results):
     date    = a.get("article_date","")
     url     = a.get("url","#")
 
+    pi = res.get("price_info")
     card_a = alert_card(res["version_a"],
         "RAG articles + Neo4j  ·  NO wiki",
         "#6c757d", "#fafafa", "#adb5bd",
-        company, date, score, url)
+        company, date, score, url, price_info=pi)
     card_b = alert_card(res["version_b"],
         "RAG articles + Neo4j + Wiki pages ✦",
         "#1a73e8", "#f0f6ff", "#1a73e8",
-        company, date, score, url)
+        company, date, score, url, price_info=pi)
 
     cards_html += f"""
 <div style="margin:32px 0 8px 0">

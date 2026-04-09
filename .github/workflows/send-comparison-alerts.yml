@@ -34,7 +34,7 @@ jobs:
           curl -s \
             -H "apikey: $SUPABASE_KEY" \
             -H "Authorization: Bearer $SUPABASE_KEY" \
-            "$SUPABASE_URL/rest/v1/articles?select=id,catchy_title,raw_title,product_name,company,indication,category,relevance_score,summary,alert_text,full_content,article_date,url&processed_at=not.is.null&relevance_score=gte.4&order=relevance_score.desc,article_date.desc&limit=8" \
+            "$SUPABASE_URL/rest/v1/articles?select=id,catchy_title,raw_title,product_name,company,indication,category,relevance_score,summary,alert_text,full_content,article_date,url&processed_at=not.is.null&relevance_score=gte.4&order=relevance_score.desc,article_date.desc&limit=20" \
             > /tmp/articles_for_alert.json
           echo "Articles fetched: $(python3 -c "import json; print(len(json.load(open('/tmp/articles_for_alert.json'))))")"
 
