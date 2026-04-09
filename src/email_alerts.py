@@ -589,17 +589,30 @@ def main():
         print(f"Raw news alerts: {len(raw_news)}")
 
     if args.source in ("trials", "all"):
-        # Only include trials first seen in the last 14 days (no stale backlog)
         from datetime import timedelta
-        cutoff = (datetime.utcnow() - timedelta(days=14)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        trials = supa_get("clinical_trials",
+        # NEW trials: first_post_date within last 60 days (genuinely new)
+        new_cutoff = (datetime.utcnow() - timedelta(days=60)).strftime("%Y-%m-%d")
+        # UPDATED trials: last_update_date within last 14 days (recent activity)
+        upd_cutoff = (datetime.utcnow() - timedelta(days=14)).strftime("%Y-%m-%d")
+
+        new_trials = supa_get("clinical_trials",
             "select=nct_id,indication,brief_title,sponsor,overall_status,"
             "enrollment_count,record_type,change_summary,first_post_date,last_update_date"
-            f"&is_alert=eq.true&alert_sent=eq.false&first_seen_at=gte.{cutoff}"
-            "&order=first_seen_at.desc")
-        if not isinstance(trials, list): trials = []
-        trials.sort(key=lambda x: (0 if x.get("record_type")=="New Trial" else 1))
-        print(f"Trial alerts (last 14 days): {len(trials)}")
+            f"&is_alert=eq.true&alert_sent=eq.false&record_type=eq.New Trial"
+            f"&first_post_date=gte.{new_cutoff}&order=first_post_date.desc")
+        if not isinstance(new_trials, list): new_trials = []
+
+        upd_trials = supa_get("clinical_trials",
+            "select=nct_id,indication,brief_title,sponsor,overall_status,"
+            "enrollment_count,record_type,change_summary,first_post_date,last_update_date"
+            f"&is_alert=eq.true&alert_sent=eq.false&record_type=eq.Updated Trial"
+            f"&last_update_date=gte.{upd_cutoff}&order=last_update_date.desc")
+        if not isinstance(upd_trials, list): upd_trials = []
+
+        # New trials first, then updates
+        trials = new_trials + upd_trials
+        print(f"Trial alerts: {len(new_trials)} new (posted since {new_cutoff}) + "
+              f"{len(upd_trials)} updated (since {upd_cutoff})")
 
     if not raw_news and not trials:
         print("Nothing to send.")
