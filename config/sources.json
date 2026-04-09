@@ -17,12 +17,15 @@
       "Kevzara", "sarilumab", "Enbrel", "etanercept",
       "Otezla", "apremilast", "Entyvio", "vedolizumab",
       "Jyseleca", "filgotinib", "Tulisokibart", "MK-7240",
-      "Duvakitug", "Spevigo", "spesolimab", "Ilumya", "tildrakizumab"
+      "Duvakitug", "Spevigo", "spesolimab", "Ilumya", "tildrakizumab",
+      "Bimzelx", "bimekizumab", "ianalumab", "nipocalimab", "izokibep",
+      "cenerimod", "Benlysta", "belimumab", "Saphnelo", "anifrolumab",
+      "Orencia", "abatacept", "Rinvoq", "Simponi", "golimumab"
     ],
     "companies": [
       "AbbVie", "Janssen", "Roche", "Novartis", "Bristol Myers Squibb",
       "Eli Lilly", "Sanofi", "Amgen", "Takeda", "Merck", "Gilead",
-      "Boehringer Ingelheim"
+      "Boehringer Ingelheim", "UCB", "GSK", "AstraZeneca", "Pfizer"
     ]
   },
   "sources": {

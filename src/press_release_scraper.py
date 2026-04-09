@@ -3,11 +3,11 @@
 Press Release Scraper v5 — Jina.ai + Direct Company Websites
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Uses https://r.jina.ai/{url} to render JS/Cloudflare-protected sites.
-Scrapes 12 company press release pages directly.
+Scrapes 14 company press release pages directly.
 Filters to RA / Plaque Psoriasis / Crohn's / UC indications.
 
 Companies: AbbVie, BMS, Sanofi, Roche, Takeda, Gilead, AstraZeneca,
-           Amgen, GSK, Pfizer, UCB, J&J + Eli Lilly (RSS)
+           Amgen, GSK, Pfizer, UCB, J&J, Novartis, Merck + Eli Lilly (RSS)
 """
 
 import os, json, subprocess, re, time, xml.etree.ElementTree as ET
@@ -60,6 +60,10 @@ SITES = [
      r'https://www\.ucb\.com/newsroom/press-releases/article/[^\s\)"\'#>]+'),
     ("J&J",         "https://www.jnj.com/latest-news/press-releases",
      r'https://www\.jnj\.com/latest-news/[a-z][^\s\)"\'#>]{14,}'),
+    ("Novartis",    "https://www.novartis.com/news/media-releases",
+     r'https://www\.novartis\.com/news/media-releases/[a-z0-9][^\s\)"\'#>]{14,}'),
+    ("Merck",       "https://www.merck.com/news/all-news/",
+     r'https://www\.merck\.com/news/[a-z0-9-]+/\d{4}/[^\s\)"\'#>]+'),
 ]
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -243,7 +247,7 @@ def main():
 
     print(f"\n=== Press Release Scraper v5 — {datetime.now().strftime('%Y-%m-%d %H:%M UTC')} ===")
     print(f"Window: {args.days} days | Source: Jina.ai (JS + Cloudflare bypass)")
-    print(f"Filter: RA / Plaque Psoriasis / Crohn's / UC | Companies: {len(SITES)+1}")
+    print(f"Filter: RA / Plaque Psoriasis / Crohn's / UC | Companies: {len(SITES)+1} (incl. Lilly RSS)")
     print("=" * 60)
 
     known  = get_known_urls()

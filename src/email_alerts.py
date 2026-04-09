@@ -270,18 +270,19 @@ def get_neo4j_context(article):
                 peer_str = ", ".join(peers) if peers else "none tracked"
                 parts.append(f"**Mechanism:** {moa}\n**Other {moa} drugs:** {peer_str}")
 
-            # 3. SWOT intelligence for the drug (top 3 entries)
-            res3 = s.run("""
-                MATCH (d:Drug {name: $drug})-[:HAS_SWOT]->(e:SWOTEntry)
-                RETURN e.swot_type AS type, e.content AS content
-                ORDER BY e.swot_type LIMIT 3
-            """, drug=drug)
-            swot_rows = res3.data()
-            if swot_rows:
-                lines = [f"**{drug} SWOT intel:**"]
-                for r in swot_rows:
-                    lines.append(f"- [{r['type'].upper()}] {r['content'][:150]}")
-                parts.append("\n".join(lines))
+            # 3. SWOT intelligence for the company (top 4 entries, company-level)
+            if company:
+                res3 = s.run("""
+                    MATCH (c:Company {name: $company})-[:HAS_SWOT]->(e:SWOTEntry)
+                    RETURN e.swot_type AS type, e.content AS content
+                    ORDER BY e.swot_type LIMIT 4
+                """, company=company)
+                swot_rows = res3.data()
+                if swot_rows:
+                    lines = [f"**{company} SWOT intel:**"]
+                    for r in swot_rows:
+                        lines.append(f"- [{r['type'].upper()}] {r['content'][:150]}")
+                    parts.append("\n".join(lines))
 
     except Exception as e:
         print(f"  Neo4j query error: {e}")

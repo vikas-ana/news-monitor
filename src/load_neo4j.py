@@ -37,14 +37,19 @@ def load_drug_profiles(driver):
     for chunk in batch(rows):
         with driver.session() as s:
             for r in chunk:
-                drug = (r.get("drug_name") or "").strip()
+                # Supabase columns: brand_name, generic_name, moa, status, indication, company
+                drug = (r.get("brand_name") or r.get("generic_name") or "").strip()
                 if not drug: continue
+                moa_val  = (r.get("moa") or r.get("mechanism_of_action") or "").strip()
+                phase_val = (r.get("status") or r.get("highest_phase") or "").strip()
                 s.run("""
                     MERGE (d:Drug {name: $drug})
-                    SET d.brand_name=$brand, d.highest_phase=$phase,
-                        d.mechanism_of_action=$moa, d.updated_at=datetime()
+                    SET d.brand_name=$brand, d.generic_name=$generic,
+                        d.highest_phase=$phase, d.mechanism_of_action=$moa,
+                        d.updated_at=datetime()
                 """, drug=drug, brand=r.get("brand_name",""),
-                     phase=r.get("highest_phase",""), moa=r.get("mechanism_of_action",""))
+                     generic=r.get("generic_name",""),
+                     phase=phase_val, moa=moa_val)
                 if r.get("company"):
                     s.run("""
                         MERGE (c:Company {name:$company})
@@ -55,11 +60,11 @@ def load_drug_profiles(driver):
                         MERGE (i:Indication {name:$ind})
                         WITH i MATCH (d:Drug {name:$drug}) MERGE (d)-[:TARGETS]->(i)
                     """, ind=r["indication"].strip(), drug=drug)
-                if r.get("mechanism_of_action"):
+                if moa_val:
                     s.run("""
                         MERGE (m:MOA {name:$moa})
                         WITH m MATCH (d:Drug {name:$drug}) MERGE (d)-[:HAS_MECHANISM]->(m)
-                    """, moa=r["mechanism_of_action"].strip(), drug=drug)
+                    """, moa=moa_val, drug=drug)
                 loaded += 1
     print(f"[OK] {loaded}/{len(rows)} drug profiles")
     return loaded
@@ -71,18 +76,22 @@ def load_swot(driver):
     loaded = 0
     with driver.session() as s:
         for r in rows:
-            drug = (r.get("drug_name") or "").strip()
-            swot = (r.get("swot_type") or "").strip()
-            content = (r.get("content") or "").strip()
-            if not drug or not swot: continue
-            key = f"{drug}::{swot}::{content[:80]}"
+            # Supabase swot_intel columns: company, category (strength/weakness/...),
+            # detail, source_date.  SWOT is company-level, not drug-level.
+            company = (r.get("company") or "").strip()
+            swot    = (r.get("category") or r.get("swot_type") or "").strip()
+            content = (r.get("detail") or r.get("content") or "").strip()
+            if not company or not swot: continue
+            key = f"{company}::{swot}::{content[:80]}"
             s.run("""
-                MERGE (d:Drug {name:$drug})
+                MERGE (c:Company {name:$company})
                 MERGE (e:SWOTEntry {key:$key})
-                SET e.swot_type=$swot, e.content=$content, e.company=$company
-                MERGE (d)-[:HAS_SWOT]->(e)
-            """, drug=drug, key=key, swot=swot,
-                 content=content[:500], company=(r.get("company") or ""))
+                SET e.swot_type=$swot, e.content=$content,
+                    e.company=$company, e.source_date=$src
+                MERGE (c)-[:HAS_SWOT]->(e)
+            """, company=company, key=key, swot=swot,
+                 content=content[:500],
+                 src=(r.get("source_date") or ""))
             loaded += 1
     print(f"[OK] {loaded}/{len(rows)} SWOT entries")
     return loaded
