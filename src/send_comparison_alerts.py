@@ -107,23 +107,37 @@ def get_neo4j_context(drug, company):
         print(f"  Neo4j error: {e}")
         return ""
 
-FORMAT_PROMPT = """You are a pharma competitive intelligence analyst. Write a structured alert in EXACTLY this format (use the exact headings):
+FORMAT_PROMPT = """Write a pharma intelligence alert. Use SHORT sentences. Bullet points only — no paragraphs. Plain English. Easy to scan in 30 seconds.
 
-**TITLE:** [drug/company event — max 12 words]
+Use EXACTLY this format:
+
+**TITLE:** [drug name + what happened — max 10 words]
 
 **WHAT'S CHANGED:**
-[1-2 sentences: the specific new information vs what was previously known. Be explicit about the delta — what is new today that wasn't known before.]
+• [One fact. What is new today that wasn't known before.]
+• [One more fact if needed. Keep it to the point.]
 
 **BACKGROUND & CONTEXT:**
-[3-4 sentences: what is this drug/company, what indication, what MOA, where does it stand competitively. Draw on the knowledge base if provided.]
+• [What this drug is. One sentence.]
+• [What company makes it. What indication it treats.]
+• [Where it sits vs competitors. One sentence.]
+• [MOA or phase. One sentence.]
 
 **IMPLICATIONS & NEXT STEPS:**
-[3 bullet points: specific competitive implications — who gains, who loses, what does the company do next]
+• [Who benefits from this news. Be specific — name the company or drug.]
+• [Who loses or faces pressure. Name them.]
+• [What the company will do next. NDA, Phase 3, launch, etc.]
 
 **KEY EVENTS TO WATCH:**
-[3 bullet points: specific future milestones, dates, or triggers that would change the situation — FDA decisions, Phase 3 readouts, competitor responses]
+• [Next specific milestone. Date if known.]
+• [Competitor response or competing readout. Date if known.]
+• [Regulatory or market event that changes the picture.]
 
-Be specific: use drug names, company names, percentages, dates. Avoid vague phrases.
+Rules:
+- Every bullet starts with a fact, not a vague phrase
+- Use drug names, company names, numbers, dates — not "significant" or "important"
+- No bullet longer than 20 words
+- No paragraphs
 """
 
 def generate_alert(article, wiki_ctx="", neo4j_ctx=""):
