@@ -1,6 +1,15 @@
 #!/usr/bin/env python3
-"""Generate 5 comparison alerts (WITH vs WITHOUT wiki+Neo4j) and send email."""
-import json, subprocess, os, smtplib, time
+"""
+Comparison alert email — isolates what the WIKI layer adds.
+
+VERSION A (LEFT):  Article + RAG past articles + Neo4j (no wiki pages)
+VERSION B (RIGHT): Article + RAG past articles + Neo4j + Wiki pages
+
+Both versions have the same article, same RAG similar-article results,
+same Neo4j graph context. The ONLY difference is whether wiki pages are included.
+This lets the reader see exactly what the 43 wiki pages contribute.
+"""
+import json, subprocess, os, smtplib, re, time
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
@@ -8,6 +17,7 @@ from datetime import datetime
 SUPA_URL   = os.environ["SUPABASE_URL"]
 SUPA_KEY   = os.environ["SUPABASE_KEY"]
 GROQ_KEY   = os.environ["GROQ_KEY"]
+JINA_KEY   = os.environ.get("JINA_API_KEY", "")
 NEO4J_URI  = os.environ.get("NEO4J_URI", "neo4j+s://e56a592d.databases.neo4j.io")
 NEO4J_USER = os.environ["NEO4J_USER"]
 NEO4J_PASS = os.environ["NEO4J_PASS"]
@@ -15,13 +25,14 @@ GMAIL_USER = os.environ.get("GMAIL_USER", "vikassharma58@gmail.com")
 GMAIL_PASS = os.environ.get("GMAIL_APP_PASS", "")
 ALERT_EMAIL = os.environ.get("ALERT_EMAIL", GMAIL_USER)
 
-def groq(prompt, max_tokens=500):
+# ── LLM ───────────────────────────────────────────────────────────────────────
+def groq(prompt, max_tokens=600):
     payload = json.dumps({
         "model": "llama-3.3-70b-versatile",
         "max_tokens": max_tokens, "temperature": 0.3,
         "messages": [{"role": "user", "content": prompt}]
     })
-    r = subprocess.run(["curl", "-s", "--max-time", "40",
+    r = subprocess.run(["curl", "-s", "--max-time", "45",
         "https://api.groq.com/openai/v1/chat/completions",
         "-H", f"Authorization: Bearer {GROQ_KEY}",
         "-H", "Content-Type: application/json", "-d", payload],
@@ -32,6 +43,7 @@ def groq(prompt, max_tokens=500):
     except: pass
     return ""
 
+# ── Supabase helpers ──────────────────────────────────────────────────────────
 def supa_get(path):
     r = subprocess.run(["curl", "-s", f"{SUPA_URL}/rest/v1/{path}",
         "-H", f"apikey: {SUPA_KEY}", "-H", f"Authorization: Bearer {SUPA_KEY}"],
@@ -39,75 +51,167 @@ def supa_get(path):
     try: return json.loads(r.stdout)
     except: return []
 
-def get_wiki_context(drug, company, indication):
-    """Fetch relevant wiki pages as text context."""
+def supa_rpc(fn, body):
+    r = subprocess.run(["curl", "-s", "-X", "POST",
+        f"{SUPA_URL}/rest/v1/rpc/{fn}",
+        "-H", f"apikey: {SUPA_KEY}",
+        "-H", f"Authorization: Bearer {SUPA_KEY}",
+        "-H", "Content-Type: application/json",
+        "-d", json.dumps(body)],
+        capture_output=True, text=True)
+    try: return json.loads(r.stdout)
+    except: return []
+
+# ── Jina embedding ────────────────────────────────────────────────────────────
+def embed_text(text):
+    """Get 768-dim embedding from Jina AI."""
+    if not JINA_KEY:
+        return None
+    payload = json.dumps({"model": "jina-embeddings-v3",
+                          "input": [text[:512]], "task": "retrieval.query"})
+    r = subprocess.run(["curl", "-s", "--max-time", "20",
+        "https://api.jina.ai/v1/embeddings",
+        "-H", f"Authorization: Bearer {JINA_KEY}",
+        "-H", "Content-Type: application/json", "-d", payload],
+        capture_output=True, text=True)
+    try:
+        d = json.loads(r.stdout)
+        return d["data"][0]["embedding"]
+    except: return None
+
+# ── RAG: similar past articles (pgvector) ────────────────────────────────────
+def get_rag_articles(article):
+    """Retrieve top 3 most similar past articles via pgvector."""
+    title = article.get("catchy_title") or article.get("raw_title") or ""
+    summary = article.get("summary") or ""
+    query = f"{title} {summary}"[:400]
+
+    vec = embed_text(query)
+    if not vec:
+        # Fallback: keyword search on same company/indication
+        company = article.get("company","")
+        ind = article.get("indication","")
+        rows = supa_get(
+            f"articles?select=catchy_title,raw_title,summary,article_date,company"
+            f"&processed_at=not.is.null&relevance_score=gte.5"
+            f"&id=neq.{article.get('id','0')}&limit=3")
+        if isinstance(rows, list):
+            parts = []
+            for r in rows:
+                t = r.get("catchy_title") or r.get("raw_title","")
+                s = r.get("summary","")[:200]
+                parts.append(f"[{r.get('article_date','')} · {r.get('company','')}] {t}\n{s}")
+            return "\n\n".join(parts)
+        return ""
+
+    rows = supa_rpc("match_articles", {
+        "query_embedding": vec,
+        "match_threshold": 0.3,
+        "match_count": 3
+    })
+    if not isinstance(rows, list) or not rows:
+        return ""
+    parts = []
+    for r in rows:
+        t = r.get("catchy_title") or r.get("raw_title","")
+        s = (r.get("summary") or "")[:200]
+        parts.append(f"[{r.get('article_date','')} · {r.get('company','')}] {t}\n{s}")
+    return "\n\n".join(parts)
+
+# ── RAG: wiki pages (pgvector) ────────────────────────────────────────────────
+def get_wiki_context(article):
+    """Retrieve top 3 most relevant wiki pages via pgvector or keyword fallback."""
+    title = article.get("catchy_title") or article.get("raw_title") or ""
+    drug  = article.get("product_name") or ""
+    company = article.get("company") or ""
+    ind   = article.get("indication") or ""
+    query = f"{drug} {company} {ind} {title}"[:400]
+
+    vec = embed_text(query)
+    if vec:
+        rows = supa_rpc("match_wiki", {
+            "query_embedding": vec,
+            "match_threshold": 0.3,
+            "match_count": 3
+        })
+        if isinstance(rows, list) and rows:
+            parts = []
+            for r in rows:
+                parts.append(f"[{r.get('entity_name','')}]\n{(r.get('content',''))[:700]}")
+            return "\n\n".join(parts)
+
+    # Keyword fallback
     pages = supa_get("wiki_pages?select=entity_name,content&limit=50")
     if not isinstance(pages, list): return ""
-    drug_l = (drug or "").lower()
-    company_l = (company or "").lower()
-    ind_l = (indication or "").lower()
+    drug_l = drug.lower()[:6]
+    co_l   = company.lower()[:5]
+    ind_l  = ind.lower()
     relevant = []
     for p in pages:
         name = (p.get("entity_name") or "").lower()
         content = p.get("content") or ""
-        if any(k in name for k in [drug_l[:6], company_l[:5]] if k):
-            relevant.append(f"[{p['entity_name']}]\n{content[:800]}")
-        elif any(k in ind_l for k in ["psoriasis","uc","crohn","ra"]) and \
-             any(k in name for k in ["psoriasis","uc","crohn","ra","ind_"]):
-            relevant.append(f"[{p['entity_name']}]\n{content[:600]}")
+        if (drug_l and drug_l in name) or (co_l and co_l in name):
+            relevant.append(f"[{p['entity_name']}]\n{content[:700]}")
+        elif any(k in ind_l for k in ["psoriasis","uc","crohn"," ra"]) and \
+             any(k in name for k in ["psoriasis","ulcerative","crohn","rheumatoid"]):
+            relevant.append(f"[{p['entity_name']}]\n{content[:500]}")
         if len(relevant) >= 3: break
     return "\n\n".join(relevant[:3])
 
+# ── Neo4j ─────────────────────────────────────────────────────────────────────
 def get_neo4j_context(drug, company):
-    """Query Neo4j for competitive context."""
     if not drug: return ""
     try:
         from neo4j import GraphDatabase
         driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASS))
         parts = []
         with driver.session() as s:
-            # Competitors
             res = s.run("""
                 MATCH (d:Drug {name: $drug})-[:COMPETES_WITH]-(c:Drug)
                 MATCH (co:Company)-[:DEVELOPS]->(c)
                 WHERE co.name <> $company
-                RETURN c.name AS drug, co.name AS co, c.highest_phase AS phase, c.mechanism_of_action AS moa
+                RETURN c.name AS drug, co.name AS co,
+                       c.highest_phase AS phase, c.mechanism_of_action AS moa
                 LIMIT 6
             """, drug=drug, company=company or "")
             rows = res.data()
             if rows:
                 lines = ["Competitors (same indication):"]
                 for r in rows:
-                    lines.append(f"  - {r['drug']} ({r['co']}, {r.get('phase','?')}) [{r.get('moa','?')}]")
+                    lines.append(f"  • {r['drug']} ({r['co']}, {r.get('phase','?')}) [{r.get('moa','?')}]")
                 parts.append("\n".join(lines))
-            # MOA
+
             res2 = s.run("""
                 MATCH (d:Drug {name: $drug})-[:HAS_MECHANISM]->(m:MOA)
-                RETURN m.name AS moa LIMIT 1
+                OPTIONAL MATCH (m)<-[:HAS_MECHANISM]-(peer:Drug) WHERE peer.name <> $drug
+                RETURN m.name AS moa, collect(peer.name)[..4] AS peers LIMIT 1
             """, drug=drug)
             moa_rows = res2.data()
-            if moa_rows:
-                parts.append(f"Mechanism: {moa_rows[0]['moa']}")
-            # Company SWOT
+            if moa_rows and moa_rows[0].get("moa"):
+                moa = moa_rows[0]["moa"]
+                peers = [p for p in (moa_rows[0].get("peers") or []) if p]
+                parts.append(f"Mechanism: {moa}" + (f"\nSame MOA peers: {', '.join(peers)}" if peers else ""))
+
             if company:
                 res3 = s.run("""
                     MATCH (c:Company {name: $co})-[:HAS_SWOT]->(e:SWOTEntry)
                     RETURN e.swot_type AS type, e.content AS content
-                    ORDER BY e.swot_type LIMIT 3
+                    ORDER BY e.swot_type LIMIT 4
                 """, co=company)
                 swot = res3.data()
                 if swot:
                     lines = [f"{company} SWOT:"]
                     for r in swot:
-                        lines.append(f"  [{r['type'].upper()}] {r['content'][:120]}")
+                        lines.append(f"  [{r['type'].upper()}] {r['content'][:130]}")
                     parts.append("\n".join(lines))
         driver.close()
         return "\n\n".join(parts)
     except Exception as e:
-        print(f"  Neo4j error: {e}")
+        print(f"  Neo4j: {e}")
         return ""
 
-FORMAT_PROMPT = """Write a pharma intelligence alert. Use SHORT sentences. Bullet points only — no paragraphs. Plain English. Easy to scan in 30 seconds.
+# ── Prompt ────────────────────────────────────────────────────────────────────
+FORMAT_PROMPT = """Write a pharma intelligence alert. SHORT sentences. Bullet points only — no paragraphs. Plain English. Scannable in 30 seconds.
 
 Use EXACTLY this format:
 
@@ -124,9 +228,9 @@ Use EXACTLY this format:
 • [MOA or phase. One sentence.]
 
 **IMPLICATIONS & NEXT STEPS:**
-• [Who benefits from this news. Be specific — name the company or drug.]
-• [Who loses or faces pressure. Name them.]
-• [What the company will do next. NDA, Phase 3, launch, etc.]
+• [Who benefits. Name the company or drug specifically.]
+• [Who faces pressure. Name them.]
+• [What the company does next. NDA, Phase 3, launch, etc.]
 
 **KEY EVENTS TO WATCH:**
 • [Next specific milestone. Date if known.]
@@ -134,48 +238,48 @@ Use EXACTLY this format:
 • [Regulatory or market event that changes the picture.]
 
 Rules:
-- Every bullet starts with a fact, not a vague phrase
-- Use drug names, company names, numbers, dates — not "significant" or "important"
+- Every bullet is a fact, not a vague phrase
+- Use drug names, company names, numbers, dates
 - No bullet longer than 20 words
-- No paragraphs
+- No paragraphs anywhere
 """
 
-def generate_alert(article, wiki_ctx="", neo4j_ctx=""):
-    drug = article.get("product_name") or ""
+def generate_alert(article, rag_articles_ctx="", neo4j_ctx="", wiki_ctx=""):
+    drug    = article.get("product_name") or ""
     company = article.get("company") or ""
-    ind = article.get("indication") or ""
-    title = article.get("catchy_title") or article.get("raw_title") or ""
+    ind     = article.get("indication") or ""
+    title   = article.get("catchy_title") or article.get("raw_title") or ""
     summary = article.get("summary") or ""
-    alert_text = article.get("alert_text") or ""
-    score = article.get("relevance_score") or 0
-    date = article.get("article_date") or ""
-    content = (article.get("full_content") or "")[:1500]
+    score   = article.get("relevance_score") or 0
+    date    = article.get("article_date") or ""
+    content = (article.get("full_content") or "")[:1200]
 
-    context_block = ""
-    if wiki_ctx:
-        context_block += f"\nKNOWLEDGE BASE (wiki pages):\n{wiki_ctx[:1200]}\n"
+    ctx_block = ""
+    if rag_articles_ctx:
+        ctx_block += f"\nSIMILAR PAST ARTICLES (RAG):\n{rag_articles_ctx[:800]}\n"
     if neo4j_ctx:
-        context_block += f"\nCOMPETITIVE LANDSCAPE (Neo4j):\n{neo4j_ctx[:800]}\n"
+        ctx_block += f"\nCOMPETITIVE LANDSCAPE (Neo4j graph):\n{neo4j_ctx[:800]}\n"
+    if wiki_ctx:
+        ctx_block += f"\nKNOWLEDGE BASE (Wiki pages — drug/company/indication profiles):\n{wiki_ctx[:1200]}\n"
 
     user = f"""ARTICLE (Score {score}/10, {date}):
 Title: {title}
 Drug: {drug} | Company: {company} | Indication: {ind}
 Summary: {summary[:500]}
-Full content excerpt: {content[:800]}
-{context_block}
-Now write the structured alert:"""
+Content excerpt: {content[:700]}
+{ctx_block}
+Write the structured alert:"""
 
     return groq(FORMAT_PROMPT + "\n" + user, max_tokens=700)
 
-# ── Load articles ──────────────────────────────────────────────────────────────
+# ── Load & select articles ────────────────────────────────────────────────────
 articles = json.load(open("/tmp/articles_for_alert.json"))
 
-# Pick 5: deduplicate Alumis (pick highest score), keep distinct stories
 seen_companies = set()
 selected = []
 for a in sorted(articles, key=lambda x: -(x.get("relevance_score") or 0)):
     co = a.get("company","")
-    if co not in seen_companies or len(selected) < 5:
+    if co not in seen_companies:
         selected.append(a)
         seen_companies.add(co)
     if len(selected) >= 5:
@@ -183,44 +287,48 @@ for a in sorted(articles, key=lambda x: -(x.get("relevance_score") or 0)):
 
 print(f"Selected {len(selected)} articles:")
 for a in selected:
-    print(f"  [{a['relevance_score']}] {a['company']} — {(a.get('catchy_title') or a.get('raw_title',''))[:60]}")
+    print(f"  [{a['relevance_score']}] {a['company']} — {(a.get('catchy_title') or a.get('raw_title',''))[:65]}")
 
-# ── Generate both versions per article ────────────────────────────────────────
+# ── Generate both versions ────────────────────────────────────────────────────
 results = []
 for i, a in enumerate(selected):
-    print(f"\nGenerating alert {i+1}/5: {a.get('company')} ...")
-    drug = a.get("product_name") or ""
+    print(f"\nAlert {i+1}/5 — {a.get('company','?')} ...")
+    drug    = a.get("product_name") or ""
     company = a.get("company") or ""
-    ind = a.get("indication") or ""
 
-    # WITHOUT context
-    print("  [A] Without wiki/Neo4j...")
-    alert_plain = generate_alert(a)
-    time.sleep(2)
-
-    # WITH context
-    print("  [B] Fetching wiki context...")
-    wiki_ctx = get_wiki_context(drug, company, ind)
-    print("  [B] Fetching Neo4j context...")
+    # Shared context (both versions get this)
+    print("  Fetching RAG past articles...")
+    rag_ctx   = get_rag_articles(a)
+    print("  Fetching Neo4j context...")
     neo4j_ctx = get_neo4j_context(drug, company)
-    print("  [B] Generating enriched alert...")
-    alert_enriched = generate_alert(a, wiki_ctx, neo4j_ctx)
-    time.sleep(2)
+
+    # Version A: RAG + Neo4j, NO wiki
+    print("  [A] Generating without wiki...")
+    alert_a = generate_alert(a, rag_ctx, neo4j_ctx, wiki_ctx="")
+    time.sleep(3)
+
+    # Version B: RAG + Neo4j + Wiki
+    print("  [B] Fetching wiki context...")
+    wiki_ctx  = get_wiki_context(a)
+    print("  [B] Generating with wiki...")
+    alert_b   = generate_alert(a, rag_ctx, neo4j_ctx, wiki_ctx)
+    time.sleep(3)
 
     results.append({
-        "article": a,
-        "plain": alert_plain,
-        "enriched": alert_enriched,
-        "wiki_ctx": wiki_ctx,
+        "article":  a,
+        "version_a": alert_a,
+        "version_b": alert_b,
+        "rag_ctx":  rag_ctx,
         "neo4j_ctx": neo4j_ctx,
+        "wiki_ctx": wiki_ctx,
     })
-    print(f"  Done.")
+    print("  Done.")
 
 # ── Build HTML email ──────────────────────────────────────────────────────────
-SCORE_COLOR = {10:"#c0392b",9:"#e74c3c",8:"#e67e22",7:"#f39c12",6:"#27ae60",5:"#2980b9",4:"#7f8c8d"}
+SCORE_COLOR = {10:"#c0392b",9:"#e74c3c",8:"#e67e22",7:"#f39c12",
+               6:"#27ae60",5:"#2980b9",4:"#7f8c8d"}
 
 def md_to_html(text):
-    import re
     text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
     text = re.sub(r'\*(.+?)\*', r'<em>\1</em>', text)
     lines = text.split('\n')
@@ -228,91 +336,116 @@ def md_to_html(text):
     for l in lines:
         l = l.strip()
         if not l:
-            out.append('<br>')
-        elif l.startswith('- ') or l.startswith('• '):
-            out.append(f'<li style="margin:4px 0">{l[2:]}</li>')
+            out.append('<div style="height:6px"></div>')
+        elif l.startswith('• ') or l.startswith('- '):
+            out.append(f'<li style="margin:5px 0;line-height:1.5">{l[2:]}</li>')
         else:
-            out.append(f'<p style="margin:6px 0">{l}</p>')
+            out.append(f'<p style="margin:8px 0;font-weight:600;color:#1a1a2e">{l}</p>')
     html = '\n'.join(out)
-    html = re.sub(r'(<li.*?>.*?</li>\n?)+', lambda m: f'<ul style="margin:8px 0 8px 16px">{m.group(0)}</ul>', html)
+    html = re.sub(r'(<li[^>]*>.*?</li>\s*)+',
+                  lambda m: f'<ul style="margin:4px 0 10px 18px;padding:0">{m.group(0)}</ul>', html)
     return html
 
-def alert_card(result, version, label, color):
-    a = result["article"]
-    score = a.get("relevance_score", 0)
+def alert_card(text, label, badge_color, bg_color, border_color, company, date, score, url):
     sc = SCORE_COLOR.get(score, "#7f8c8d")
-    company = a.get("company","")
-    date = a.get("article_date","")
-    url = a.get("url","#")
-    text = result[version]
     return f"""
-<div style="background:{color};border-left:5px solid {sc};border-radius:8px;
-     padding:20px;margin:0 0 16px 0;font-family:Arial,sans-serif;">
-  <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
-    <span style="background:{sc};color:#fff;padding:3px 10px;border-radius:12px;
-          font-weight:bold;font-size:13px">{score}/10</span>
-    <span style="color:#555;font-size:13px">{company} · {date}</span>
-    <span style="background:{'#1a73e8' if version=='enriched' else '#888'};color:#fff;
-          padding:2px 8px;border-radius:10px;font-size:11px;font-weight:bold">{label}</span>
-    <a href="{url}" style="color:#1a73e8;font-size:12px;margin-left:auto">Source →</a>
+<div style="background:{bg_color};border-left:5px solid {border_color};border-radius:8px;
+     padding:18px 20px;font-family:Arial,sans-serif;height:100%;box-sizing:border-box;">
+  <div style="margin-bottom:12px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+    <span style="background:{sc};color:#fff;padding:3px 9px;border-radius:10px;
+          font-weight:bold;font-size:12px">{score}/10</span>
+    <span style="background:{badge_color};color:#fff;padding:3px 9px;border-radius:10px;
+          font-size:11px;font-weight:bold">{label}</span>
+    <span style="color:#666;font-size:12px">{company} · {date}</span>
+    <a href="{url}" style="color:#1a73e8;font-size:11px;margin-left:auto;text-decoration:none">
+      Source →</a>
   </div>
-  <div style="color:#222;font-size:14px;line-height:1.6">{md_to_html(text)}</div>
+  <div style="color:#222;font-size:13.5px;line-height:1.6">{md_to_html(text)}</div>
 </div>"""
 
 today = datetime.now().strftime("%d %b %Y")
 cards_html = ""
 for i, res in enumerate(results):
-    a = res["article"]
-    score = a.get("relevance_score",0)
-    sc = SCORE_COLOR.get(score,"#7f8c8d")
+    a     = res["article"]
+    score = a.get("relevance_score", 0)
+    sc    = SCORE_COLOR.get(score, "#7f8c8d")
     title = a.get("catchy_title") or a.get("raw_title") or ""
-    cards_html += f"""
-<div style="margin:30px 0 8px 0">
-  <h2 style="margin:0;padding:10px 14px;background:#1a1a2e;color:#fff;border-radius:6px 6px 0 0;
-      font-size:16px;display:flex;align-items:center;gap:10px">
-    <span style="background:{sc};color:#fff;padding:2px 8px;border-radius:10px;font-size:13px">
-      #{i+1} · {score}/10</span>
-    {title[:80]}
-  </h2>
-</div>
-<table width="100%" cellspacing="8" cellpadding="0" style="margin-bottom:24px">
-<tr>
-  <td width="50%" valign="top">{alert_card(res,'plain','WITHOUT wiki + Neo4j','#fafafa')}</td>
-  <td width="50%" valign="top">{alert_card(res,'enriched','WITH wiki + Neo4j','#f0f4ff')}</td>
-</tr>
-</table>
-<hr style="border:1px solid #eee;margin:8px 0 24px 0">"""
+    company = a.get("company","")
+    date    = a.get("article_date","")
+    url     = a.get("url","#")
 
-html = f"""<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;background:#f5f5f5;
-  margin:0;padding:20px;max-width:1400px;margin:auto">
-<div style="background:#1a1a2e;color:#fff;padding:20px 24px;border-radius:8px;margin-bottom:24px">
-  <h1 style="margin:0 0 4px 0;font-size:22px">🧠 Pharma Intelligence — 5 Alerts</h1>
-  <p style="margin:0;color:#aaa;font-size:13px">{today} · Comparison: Article-only vs Wiki + Neo4j enriched · Side by side</p>
+    card_a = alert_card(res["version_a"],
+        "RAG articles + Neo4j  ·  NO wiki",
+        "#6c757d", "#fafafa", "#adb5bd",
+        company, date, score, url)
+    card_b = alert_card(res["version_b"],
+        "RAG articles + Neo4j + Wiki pages ✦",
+        "#1a73e8", "#f0f6ff", "#1a73e8",
+        company, date, score, url)
+
+    cards_html += f"""
+<div style="margin:32px 0 8px 0">
+  <div style="background:#1a1a2e;color:#fff;padding:12px 16px;border-radius:6px 6px 0 0;
+      display:flex;align-items:center;gap:10px">
+    <span style="background:{sc};color:#fff;padding:2px 9px;border-radius:10px;
+          font-size:13px;font-weight:bold">#{i+1} · {score}/10</span>
+    <span style="font-size:15px;font-weight:600">{title[:85]}</span>
+  </div>
 </div>
-<div style="background:#e8f4fd;border:1px solid #bee3f8;border-radius:6px;padding:12px 16px;margin-bottom:20px;font-size:13px">
-  <strong>How to read this:</strong> LEFT column = alert generated from article text only.
-  RIGHT column (blue) = same alert enriched with wiki pages (43 pages of competitive intelligence)
-  and Neo4j graph (drug competitors, MOA, company SWOT). Compare to see what context adds.
+<table width="100%" cellspacing="10" cellpadding="0" border="0"
+       style="margin-bottom:12px;table-layout:fixed">
+  <tr>
+    <td width="50%" valign="top">{card_a}</td>
+    <td width="50%" valign="top">{card_b}</td>
+  </tr>
+</table>
+<hr style="border:none;border-top:1px solid #e0e0e0;margin:4px 0 28px 0">"""
+
+html = f"""<!DOCTYPE html>
+<html><body style="font-family:Arial,sans-serif;background:#f4f5f7;
+  margin:0;padding:20px;max-width:1380px;margin:0 auto">
+
+<div style="background:linear-gradient(135deg,#1a1a2e,#16213e);color:#fff;
+    padding:22px 28px;border-radius:10px;margin-bottom:20px">
+  <h1 style="margin:0 0 6px 0;font-size:21px">🧠 Pharma Intelligence — 5 Alerts</h1>
+  <p style="margin:0;color:#a0aec0;font-size:13px">
+    {today} &nbsp;·&nbsp; Isolating the Wiki layer &nbsp;·&nbsp;
+    Both columns have RAG past articles + Neo4j graph context</p>
 </div>
+
+<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:6px;
+    padding:12px 16px;margin-bottom:20px;font-size:13px;color:#555">
+  <strong>What you're comparing:</strong><br>
+  <span style="display:inline-block;background:#6c757d;color:#fff;padding:1px 7px;
+    border-radius:8px;font-size:11px;margin:4px 4px 0 0">LEFT (grey)</span>
+  RAG (3 similar past articles) + Neo4j (competitors, MOA, SWOT) — <em>no wiki pages</em><br>
+  <span style="display:inline-block;background:#1a73e8;color:#fff;padding:1px 7px;
+    border-radius:8px;font-size:11px;margin:4px 4px 0 0">RIGHT (blue) ✦</span>
+  Same as left, <strong>plus 43 wiki pages</strong>
+  (drug profiles, company SWOT, indication landscape, MOA guide, strategic watchlist)
+</div>
+
 {cards_html}
-<div style="text-align:center;color:#999;font-size:11px;margin-top:20px;padding-top:16px;
-    border-top:1px solid #eee">Generated by Pharma News Monitor · {today}</div>
+
+<div style="text-align:center;color:#aaa;font-size:11px;
+    margin-top:16px;padding-top:16px;border-top:1px solid #e0e0e0">
+  Pharma News Monitor · {today}
+</div>
 </body></html>"""
 
-# ── Send email ─────────────────────────────────────────────────────────────────
+# ── Send ──────────────────────────────────────────────────────────────────────
 msg = MIMEMultipart("alternative")
-msg["Subject"] = f"🧠 5 Pharma Alerts — Side-by-Side Comparison ({today})"
-msg["From"] = GMAIL_USER
-msg["To"] = ALERT_EMAIL
+msg["Subject"] = f"🧠 Wiki Layer Comparison — 5 Alerts ({today})"
+msg["From"]    = GMAIL_USER
+msg["To"]      = ALERT_EMAIL
 msg.attach(MIMEText(html, "html"))
 
 try:
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-        server.login(GMAIL_USER, GMAIL_PASS)
-        server.sendmail(GMAIL_USER, ALERT_EMAIL, msg.as_string())
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as srv:
+        srv.login(GMAIL_USER, GMAIL_PASS)
+        srv.sendmail(GMAIL_USER, ALERT_EMAIL, msg.as_string())
     print("\n✅ Email sent!")
 except Exception as e:
     print(f"\n❌ Email error: {e}")
-    # Save HTML locally for inspection
     open("/tmp/alerts_preview.html","w").write(html)
-    print("Saved preview to /tmp/alerts_preview.html")
+    print("HTML saved to /tmp/alerts_preview.html")
