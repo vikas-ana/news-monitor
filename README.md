@@ -91,11 +91,58 @@ Each major drug, indication, and company has a **living wiki page** in Supabase 
 
 | Entity type | Count | Examples |
 |-------------|-------|---------|
-| Drug | 22 | Rinvoq, Skyrizi, Humira, Sotyktu, Bimzelx, Duvakitug, Taltz, Entyvio… |
+| Drug | 21 | Rinvoq, Skyrizi, Humira, Sotyktu, Bimzelx, Duvakitug, Taltz, Entyvio… |
 | Indication | 4 | RA, Psoriasis/PsA, Crohn's Disease, Ulcerative Colitis |
-| Company | 8 | AbbVie, BMS, UCB, Lilly, Sanofi, Takeda, J&J, Merck |
+| Company | 15 | AbbVie, BMS, UCB, Lilly, Sanofi, Takeda, J&J, Merck, Novartis, AZ, GSK, Amgen, Roche, Regeneron, BI |
+| Landscape | 2 | MOA Landscape (18 MOA classes), Strategic Watch List 2025-27 |
+
+**Total: 43 wiki pages** — seeded from `Pharma_Immunology_Competitive_Report_2026.docx` (March 2026). Each company page includes: tier ranking, approved drugs table, full SWOT, key earnings quote, strategic watch notes.
 
 After each pipeline run, `wiki_updater.py` appends a bullet to the **Recent Developments** section of any page touched by today's articles. Pages accumulate a timeline of press releases over time. These pages are retrieved via pgvector similarity and injected as competitive context into the email alert.
+
+---
+
+## Step-by-Step: How One Alert Is Generated
+
+> Example: AbbVie publishes *"Rinvoq Phase 3 SLE trial meets primary endpoint"*
+
+**Step 1 — Article arrives** (`fetcher.py` / `press_release_scraper.py`)
+Raw article saved to Supabase: `raw_title`, `url`, `company`, `source`, `article_date`.
+`alert_sent = false`, `processed_at = null`.
+
+**Step 2 — Full content fetch** (`backfill_content.py`)
+Jina.ai reader fetches the full press release text (handles JS, Cloudflare).
+`full_content` stored — up to 12,000 characters.
+
+**Step 3 — LLM processing** (`processor.py`) — *article-only context, no RAG*
+Groq Llama 3.1 8B runs 6 steps on the article text:
+- Scope filter → in-scope (RA/Psoriasis/Crohn's/UC) ✓
+- Extract: `product_name = "Rinvoq"`, `company = "AbbVie"`, `indication = "RA/SLE"`
+- Classify: `category = "clinical"`
+- Summarise: 3-sentence factual summary
+- Headline: catchy title ≤ 12 words
+- Score: `relevance_score = 10` → sets `is_alert = true`
+
+**Step 4 — Deduplication** (`email_alerts.py`)
+Queries all `is_alert=true AND alert_sent=false`.
+Groups same-event articles (same product + same day) into one lead + "Also reported by..." links.
+
+**Step 5 — RAG enrichment** (score ≥ 7 only — three parallel lookups)
+
+| Lookup | Source | What it pulls |
+|--------|--------|---------------|
+| Wiki similarity search | pgvector | `drug_rinvoq` page (MOA, history, indications), `co_abbvie` page (SWOT, earnings quote), `strategic_watchlist` (Rinvoq SLE catalyst note) |
+| Article similarity search | pgvector | 3 most similar past articles (previous Rinvoq results, prior SLE drug data) |
+| Neo4j graph queries | Bolt driver | Competitors (Sotyktu, Saphnelo, Benlysta in SLE); MOA peers (Olumiant, Jyseleca share JAK1); AbbVie SWOT ("Rinvoq SLE Ph3 = 6th indication opportunity") |
+
+**Step 6 — Enriched alert generation** (Groq → Haiku fallback)
+All context assembled into one prompt. Groq 8B generates 3-bullet analyst-style alert with competitive implications. If Groq fails → Claude Haiku fallback.
+
+**Step 7 — Email sent** (`email_alerts.py`)
+HTML email with score badge, category tags, enriched alert text, competitor bullets, and clinical trial section.
+→ `alert_sent = true` written back to Supabase.
+
+**Total pipeline time: ~4–6 minutes per run.**
 
 ---
 
@@ -166,21 +213,23 @@ Articles not about RA/Psoriasis/Crohn's/UC are filtered before LLM processing (s
 
 Scraped via `https://r.jina.ai/{url}` — renders JavaScript, bypasses Cloudflare.
 
-| Company | Press release listing page |
-|---------|---------------------------|
-| AbbVie | news.abbvie.com/news/press-releases |
-| BMS | news.bms.com/news |
-| Sanofi | sanofi.com/en/media-room/press-releases |
-| Roche | roche.com/media/releases |
-| Takeda | takeda.com/newsroom/newsreleases/ |
-| Gilead | gilead.com/news-and-press/press-room/press-releases |
-| AstraZeneca | astrazeneca.com/media-centre/press-releases.html |
-| Amgen | amgen.com/newsroom/press-releases |
-| GSK | gsk.com/en-gb/media/press-releases/ |
-| Pfizer | pfizer.com/news/press-releases |
-| UCB | ucb.com/newsroom/press-releases |
-| J&J | jnj.com/latest-news/press-releases |
-| Eli Lilly | investor.lilly.com (IR RSS + Jina article fetch) |
+| Company | Press release listing page | Key drugs tracked |
+|---------|---------------------------|------------------|
+| AbbVie | news.abbvie.com/news/press-releases | Rinvoq, Skyrizi, Humira |
+| BMS | news.bms.com/news | Sotyktu, Zeposia, Orencia |
+| Sanofi | sanofi.com/en/media-room/press-releases | Kevzara, Duvakitug |
+| Roche | roche.com/media/releases | Actemra, Rituxan |
+| Takeda | takeda.com/newsroom/newsreleases/ | Entyvio |
+| Gilead | gilead.com/news-and-press/press-room/press-releases | Jyseleca |
+| AstraZeneca | astrazeneca.com/media-centre/press-releases.html | Saphnelo |
+| Amgen | amgen.com/newsroom/press-releases | Enbrel, Otezla, Amgevita |
+| GSK | gsk.com/en-gb/media/press-releases/ | Benlysta |
+| Pfizer | pfizer.com/news/press-releases | Biosimilars |
+| UCB | ucb.com/newsroom/press-releases | Bimzelx, Cimzia |
+| J&J | jnj.com/latest-news/press-releases | Stelara, Tremfya, Nipocalimab |
+| Novartis | novartis.com/news/media-releases | Cosentyx, Ianalumab |
+| Merck | merck.com/news/all-news/ | Tulisokibart (MK-7240) |
+| Eli Lilly | investor.lilly.com (IR RSS + Jina article fetch) | Taltz, Omvoh, Olumiant |
 
 ---
 
@@ -208,12 +257,13 @@ Filter: sponsor OR collaborator class = `INDUSTRY` only.
 | Script | Job |
 |--------|-----|
 | `fetcher.py` | RSS feeds → Supabase raw articles |
-| `press_release_scraper.py` | Direct website scraping via Jina.ai (13 companies) |
+| `press_release_scraper.py` | Direct website scraping via Jina.ai (15 companies) |
 | `backfill_content.py` | Fetch full text via URL scrape + Google Cache |
 | `processor.py` | LLM pipeline — classify, summarise, score, alert (article-only) |
 | `embed_articles.py` | Jina AI embeddings for articles + wiki pages → pgvector |
 | `wiki_updater.py` | LLM wiki updater — appends to living drug/indication/company pages |
-| `seed_wiki.py` | One-time: seed 34 initial wiki pages (drugs, indications, companies) |
+| `seed_wiki.py` | One-time: seed initial wiki pages (drugs, indications, companies) |
+| `load_docx_wiki.py` | One-time: load competitive report docx → 9 company + landscape wiki pages |
 | `load_neo4j.py` | Sync Supabase → Neo4j knowledge graph (MERGE, idempotent) |
 | `email_alerts.py` | Deduplicate + RAG-enrich alerts + share price + send Gmail |
 | `trials_monitor.py` | ClinicalTrials.gov — new trials + change detection |
@@ -288,18 +338,26 @@ Without PR pages you'd get "AbbVie reports positive Skyrizi results" (headline o
 | `GMAIL_APP_PASS` | Google Account → Security → App passwords |
 | `ALERT_EMAIL` | Recipient email (can be same as GMAIL_USER) |
 
-### One-time setup (RAG + Wiki layer)
+### One-time setup (RAG + Wiki + Neo4j layer)
 
 ```bash
 # 1. Run in Supabase SQL editor:
-#    migrations/002_pgvector_wiki.sql
-#    (enables pgvector, creates wiki_pages table, creates match_* RPC functions)
+#    migrations/002_pgvector_wiki.sql   (pgvector, wiki_pages, match_* RPC functions)
+#    migrations/003_rejected_articles.sql  (audit log for filtered articles)
 
-# 2. Seed initial wiki pages (22 drugs + 4 indications + 8 companies):
+# 2. Seed initial wiki pages (drugs + indications + companies):
 SUPABASE_KEY=your_key python src/seed_wiki.py
 
-# 3. Add JINA_API_KEY to GitHub Actions secrets:
-#    Repo → Settings → Secrets and variables → Actions → New repository secret
+# 3. Load competitive intelligence from docx (43 total wiki pages after this):
+SUPABASE_KEY=your_key python src/load_docx_wiki.py
+
+# 4. Load Neo4j knowledge graph (drug profiles + SWOT + competition edges):
+SUPABASE_KEY=your_key NEO4J_URI=... NEO4J_USER=... NEO4J_PASS=... python src/load_neo4j.py
+
+# 5. Add secrets to GitHub Actions:
+#    SUPABASE_KEY, GROQ_KEY, JINA_API_KEY, NEO4J_USER, NEO4J_PASS
+#    GMAIL_USER, GMAIL_APP_PASS, ALERT_EMAIL
+#    ANTHROPIC_KEY (optional — Claude Haiku fallback if Groq fails)
 ```
 
-After these three steps, the next workflow run will auto-embed articles and update wiki pages.
+After setup, the workflow runs automatically 3× daily. Wiki pages are updated after each run.
