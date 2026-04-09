@@ -84,6 +84,24 @@ def supa_upsert(data):
         "-H", "Prefer: resolution=ignore-duplicates,return=minimal",
         "-d", json.dumps(data)], capture_output=True)
 
+def supa_log_rejected(url, title, company, source, article_date, reason):
+    """Write a rejected article to the separate rejected_articles audit table."""
+    data = {
+        "url":           url,
+        "raw_title":     title[:300] if title else "",
+        "company":       company,
+        "source":        source,
+        "article_date":  article_date,
+        "filter_reason": reason,
+    }
+    subprocess.run(["curl", "-s", "--max-time", "20", "-X", "POST",
+        f"{SUPABASE_URL}/rest/v1/rejected_articles",
+        "-H", f"apikey: {SUPABASE_KEY}",
+        "-H", f"Authorization: Bearer {SUPABASE_KEY}",
+        "-H", "Content-Type: application/json",
+        "-H", "Prefer: resolution=ignore-duplicates,return=minimal",
+        "-d", json.dumps(data)], capture_output=True)
+
 def get_known_urls():
     r = subprocess.run(["curl", "-s", "--max-time", "20",
         f"{SUPABASE_URL}/rest/v1/articles?select=url&source=eq.press_release&limit=5000",
@@ -148,19 +166,7 @@ def scrape_site(company, listing_url, url_re, known_urls, cutoff):
         if pub_date < cutoff:
             continue
         if not is_relevant(f"{title} {art_md[:3000]}"):
-            # Audit log: write rejected article so it appears in filter log
-            supa_upsert({
-                "url":            article_url,
-                "raw_title":      title[:300],
-                "source":         "press_release",
-                "company":        company,
-                "article_date":   pub_date,
-                "fetched_at":     datetime.now(timezone.utc).isoformat(),
-                "indication":     "filtered",
-                "relevance_score": 1,
-                "filter_reason":  "no_keyword_match",
-                "processed_at":   datetime.now(timezone.utc).isoformat(),
-            })
+            supa_log_rejected(article_url, title, company, "press_release", pub_date, "no_keyword_match")
             print(f"    ⏭  {pub_date} | {title[:60]} [no keyword match]")
             continue
 
@@ -202,18 +208,7 @@ def scrape_lilly_rss(known_urls, cutoff):
         pubdate = (item.findtext("pubDate") or "")[:16]
         if not link or link in known_urls: continue
         if not is_relevant(title):
-            supa_upsert({
-                "url":            link,
-                "raw_title":      title[:300],
-                "source":         "press_release",
-                "company":        "Eli Lilly",
-                "article_date":   pub_date,
-                "fetched_at":     datetime.now(timezone.utc).isoformat(),
-                "indication":     "filtered",
-                "relevance_score": 1,
-                "filter_reason":  "no_keyword_match",
-                "processed_at":   datetime.now(timezone.utc).isoformat(),
-            })
+            supa_log_rejected(link, title, "Eli Lilly", "press_release", pub_date, "no_keyword_match")
             print(f"    ⏭  {pub_date} | {title[:60]} [no keyword match]")
             continue
         try:

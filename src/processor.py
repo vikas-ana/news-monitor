@@ -97,6 +97,23 @@ def supabase_get(path):
     try:    return json.loads(r.stdout)
     except: return []
 
+def supabase_log_rejected(article, reason):
+    """Write out-of-scope article to the rejected_articles audit table."""
+    data = json.dumps({
+        "url":           article.get("url", ""),
+        "raw_title":     (article.get("raw_title") or "")[:300],
+        "company":       article.get("company", ""),
+        "source":        article.get("source", ""),
+        "article_date":  article.get("article_date", ""),
+        "filter_reason": reason,
+    })
+    curl_post(f"{SUPABASE_URL}/rest/v1/rejected_articles", data, {
+        "apikey":         SUPABASE_KEY,
+        "Authorization":  f"Bearer {SUPABASE_KEY}",
+        "Content-Type":   "application/json",
+        "Prefer":         "resolution=ignore-duplicates,return=minimal",
+    })
+
 def supabase_patch(table, record_id, data):
     curl_patch(f"{SUPABASE_URL}/rest/v1/{table}?id=eq.{record_id}",
         json.dumps(data), {
@@ -175,12 +192,12 @@ def process_article(article):
     updates = {}
     models_used = []
 
-    # ── Pre-filter: out of scope → score 1, mark processed, stop ──────────────
+    # ── Pre-filter: out of scope → log to rejected_articles, mark processed ──
     if not is_in_scope(text):
-        print(f"  ⏭  Out of scope — skipping")
+        print(f"  ⏭  Out of scope — logging rejection")
+        supabase_log_rejected(article, "out_of_scope")
         updates["relevance_score"] = 1
         updates["category"]        = "out_of_scope"
-        updates["filter_reason"]   = "out_of_scope"
         updates["processed_at"]    = datetime.now(timezone.utc).isoformat()
         return updates, []
 

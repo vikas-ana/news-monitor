@@ -64,9 +64,12 @@ to generate an accurate, specific competitive alert.
 ## Q: Is there a log of every article checked — selected vs rejected?
 
 **Yes — as of 2026-04-09.** All articles are written to the Supabase `articles` table
-with a `filter_reason` field and `relevance_score`.
+with a `rejected_articles` table (separate from the main articles table).
 
-### filter_reason values
+The main `articles` table stays clean — only in-scope, LLM-scored articles live there.
+Rejected articles go to `rejected_articles` keeping the two concerns separated.
+
+### rejected_articles table — filter_reason values
 
 | filter_reason | Stage | Meaning |
 |---------------|-------|---------|
@@ -80,7 +83,7 @@ Run this in the Supabase SQL editor to see today's audit:
 
 ```sql
 select article_date, company, raw_title, relevance_score, is_alert, filter_reason, status
-from article_audit_log
+from rejection_log
 where fetched_at > now() - interval '24 hours'
 order by fetched_at desc;
 ```
@@ -88,13 +91,14 @@ order by fetched_at desc;
 Or filter to see only rejected articles:
 ```sql
 select article_date, company, raw_title, filter_reason
-from article_audit_log
+from rejection_log
 where filter_reason is not null
 and fetched_at > now() - interval '24 hours';
 ```
 
 Or see only alerts:
 ```sql
+-- Alerted articles (main articles table — in scope, LLM scored)
 select article_date, company, raw_title, relevance_score, alert_text
 from articles
 where is_alert = true
