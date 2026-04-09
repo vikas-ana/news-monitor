@@ -589,13 +589,17 @@ def main():
         print(f"Raw news alerts: {len(raw_news)}")
 
     if args.source in ("trials", "all"):
+        # Only include trials first seen in the last 14 days (no stale backlog)
+        from datetime import timedelta
+        cutoff = (datetime.utcnow() - timedelta(days=14)).strftime("%Y-%m-%dT%H:%M:%SZ")
         trials = supa_get("clinical_trials",
             "select=nct_id,indication,brief_title,sponsor,overall_status,"
             "enrollment_count,record_type,change_summary,first_post_date,last_update_date"
-            "&is_alert=eq.true&alert_sent=eq.false&order=first_seen_at.desc")
+            f"&is_alert=eq.true&alert_sent=eq.false&first_seen_at=gte.{cutoff}"
+            "&order=first_seen_at.desc")
         if not isinstance(trials, list): trials = []
         trials.sort(key=lambda x: (0 if x.get("record_type")=="New Trial" else 1))
-        print(f"Trial alerts:    {len(trials)}")
+        print(f"Trial alerts (last 14 days): {len(trials)}")
 
     if not raw_news and not trials:
         print("Nothing to send.")
