@@ -33,6 +33,6 @@ jobs:
         # First run: full history load
         # Subsequent runs: incremental (last 2 days only) — runs in ~30 seconds
 
-      - name: Step 2 — Send trial alerts via email
-        run: python src/email_alerts.py --source trials
-        continue-on-error: true
+      # Trial email alerts disabled — re-enable when trial data quality is verified
+      # - name: Step 2 — Send trial alerts via email
+      #   run: python src/email_alerts.py --source trials

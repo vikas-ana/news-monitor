@@ -68,8 +68,8 @@ jobs:
         run: python src/load_neo4j.py
         continue-on-error: true
 
-      - name: Step 5 — Send email alerts (news + trials, score >= 7, RAG-enriched)
-        run: python src/email_alerts.py --source all
+      - name: Step 5 — Send email alerts (news only, score >= 7, RAG-enriched)
+        run: python src/email_alerts.py --source news
         continue-on-error: true
 
       - name: Commit backup JSON
