@@ -13,6 +13,11 @@ from email.mime.text import MIMEText
 from datetime import datetime
 from collections import defaultdict
 
+try:
+    from neo4j import GraphDatabase as _Neo4jGD
+except ImportError:
+    _Neo4jGD = None
+
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_KEY"]
 GMAIL_USER   = os.environ["GMAIL_USER"]
@@ -20,6 +25,9 @@ GMAIL_PASS   = os.environ["GMAIL_APP_PASS"]
 ALERT_TO     = os.environ.get("ALERT_EMAIL", os.environ["GMAIL_USER"])
 GROQ_KEY     = os.environ.get("GROQ_KEY", "")
 JINA_API_KEY = os.environ.get("JINA_API_KEY", "")
+NEO4J_URI    = os.environ.get("NEO4J_URI",  "neo4j+s://e56a592d.databases.neo4j.io")
+NEO4J_USER   = os.environ.get("NEO4J_USER", "")
+NEO4J_PASS   = os.environ.get("NEO4J_PASS", "")
 
 CATEGORY_EMOJI = {"clinical": "🔬", "regulatory": "📋", "commercial": "💼"}
 SCORE_LABEL    = {10:"🚨 CRITICAL", 9:"🔴 HIGH", 8:"🟠 HIGH", 7:"🟡 MEDIUM", 6:"🟢 NOTABLE"}
@@ -170,7 +178,95 @@ def get_rag_context(article):
 
     return "\n\n".join(context_parts)
 
-def generate_enriched_alert(article, rag_context):
+# ── Neo4j: structured competitive landscape ───────────────────────────────────
+_neo4j_driver = None
+
+def _get_neo4j_driver():
+    global _neo4j_driver
+    if _neo4j_driver:
+        return _neo4j_driver
+    if not _Neo4jGD or not NEO4J_USER or not NEO4J_PASS:
+        return None
+    try:
+        _neo4j_driver = _Neo4jGD.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASS))
+        _neo4j_driver.verify_connectivity()
+        return _neo4j_driver
+    except Exception as e:
+        print(f"  Neo4j connect failed: {e}")
+        return None
+
+def get_neo4j_context(article):
+    """
+    Query Neo4j for structured competitive intelligence about the drug/indication:
+    - Direct competitors (same indication, other companies)
+    - MOA and drugs sharing the same mechanism
+    - SWOT entries for the drug
+    Returns formatted context string or empty string.
+    """
+    drug    = (article.get("product_name") or "").strip()
+    company = (article.get("company") or "").strip()
+    if not drug:
+        return ""
+
+    driver = _get_neo4j_driver()
+    if not driver:
+        return ""
+
+    parts = []
+    try:
+        with driver.session() as s:
+            # 1. Competitors in the same indication (different company)
+            res = s.run("""
+                MATCH (d:Drug {name: $drug})-[:COMPETES_WITH]-(c:Drug)
+                MATCH (co:Company)-[:DEVELOPS]->(c)
+                WHERE co.name <> $company
+                RETURN c.name AS drug, co.name AS company,
+                       c.highest_phase AS phase, c.mechanism_of_action AS moa
+                ORDER BY c.name LIMIT 8
+            """, drug=drug, company=company)
+            competitors = res.data()
+            if competitors:
+                lines = ["**Direct competitors (same indication):**"]
+                for r in competitors:
+                    moa_str = f" [{r['moa']}]" if r.get('moa') else ""
+                    lines.append(f"- {r['drug']} ({r['company']}, {r.get('phase','?')}){moa_str}")
+                parts.append("\n".join(lines))
+
+            # 2. MOA + drugs sharing the same mechanism
+            res2 = s.run("""
+                MATCH (d:Drug {name: $drug})-[:HAS_MECHANISM]->(m:MOA)
+                OPTIONAL MATCH (m)<-[:HAS_MECHANISM]-(peer:Drug)
+                WHERE peer.name <> $drug
+                RETURN m.name AS moa, collect(peer.name)[..5] AS peers
+                LIMIT 1
+            """, drug=drug)
+            moa_rows = res2.data()
+            if moa_rows and moa_rows[0].get("moa"):
+                moa = moa_rows[0]["moa"]
+                peers = [p for p in (moa_rows[0].get("peers") or []) if p]
+                peer_str = ", ".join(peers) if peers else "none tracked"
+                parts.append(f"**Mechanism:** {moa}\n**Other {moa} drugs:** {peer_str}")
+
+            # 3. SWOT intelligence for the drug (top 3 entries)
+            res3 = s.run("""
+                MATCH (d:Drug {name: $drug})-[:HAS_SWOT]->(e:SWOTEntry)
+                RETURN e.swot_type AS type, e.content AS content
+                ORDER BY e.swot_type LIMIT 3
+            """, drug=drug)
+            swot_rows = res3.data()
+            if swot_rows:
+                lines = [f"**{drug} SWOT intel:**"]
+                for r in swot_rows:
+                    lines.append(f"- [{r['type'].upper()}] {r['content'][:150]}")
+                parts.append("\n".join(lines))
+
+    except Exception as e:
+        print(f"  Neo4j query error: {e}")
+        return ""
+
+    return "\n\n".join(parts)
+
+def generate_enriched_alert(article, rag_context, neo4j_context=""):
     """
     Use Groq + RAG context to generate a richer, more contextual alert_text.
     Only called for score >= 7 articles.
@@ -192,7 +288,9 @@ Drug: {drug} | Company: {company} | Indication: {ind} | Score: {score}/10
 Summary: {summary[:600]}
 Existing alert: {existing_alert[:300]}
 
-{("CONTEXT FROM KNOWLEDGE BASE:\n" + rag_context[:1500]) if rag_context else ""}
+{("KNOWLEDGE BASE (wiki + similar articles):\n" + rag_context[:1200]) if rag_context else ""}
+
+{("COMPETITIVE LANDSCAPE (Neo4j knowledge graph):\n" + neo4j_context[:800]) if neo4j_context else ""}
 
 Write a concise alert (2-3 sentences) covering:
 1. What happened and why it matters competitively
@@ -470,22 +568,24 @@ def main():
     groups = deduplicate_alerts(raw_news)
     print(f"After dedup: {len(raw_news)} articles -> {len(groups)} unique events")
 
-    # RAG enrichment: enrich alert_text for score >= 7 articles
-    if JINA_API_KEY:
-        print("Enriching alerts with RAG context...")
-        for lead, _ in groups:
-            score = lead.get("relevance_score") or 0
-            if score >= 7:
-                rag_ctx = get_rag_context(lead)
-                if rag_ctx:
-                    enriched = generate_enriched_alert(lead, rag_ctx)
-                    if enriched:
-                        lead["alert_text"] = enriched
-                        lead["_rag_enriched"] = True
-                        print(f"  OK RAG-enriched: {(lead.get('catchy_title') or lead.get('raw_title','?'))[:50]}")
-                time.sleep(0.5)
-    else:
-        print("  JINA_API_KEY not set -- skipping RAG enrichment")
+    # RAG + Neo4j enrichment: enrich alert_text for score >= 7 articles
+    print("Enriching alerts with RAG + Neo4j context...")
+    for lead, _ in groups:
+        score = lead.get("relevance_score") or 0
+        if score >= 7:
+            rag_ctx    = get_rag_context(lead) if JINA_API_KEY else ""
+            neo4j_ctx  = get_neo4j_context(lead)
+            if rag_ctx or neo4j_ctx:
+                enriched = generate_enriched_alert(lead, rag_ctx, neo4j_ctx)
+                if enriched:
+                    lead["alert_text"] = enriched
+                    lead["_rag_enriched"] = True
+                    sources = " + ".join(filter(None, [
+                        "RAG" if rag_ctx else "",
+                        "Neo4j" if neo4j_ctx else ""
+                    ]))
+                    print(f"  OK [{sources}] {(lead.get('catchy_title') or lead.get('raw_title','?'))[:50]}")
+            time.sleep(0.5)
 
     if send_email(groups, trials):
         if raw_news:
