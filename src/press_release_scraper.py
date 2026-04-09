@@ -148,6 +148,20 @@ def scrape_site(company, listing_url, url_re, known_urls, cutoff):
         if pub_date < cutoff:
             continue
         if not is_relevant(f"{title} {art_md[:3000]}"):
+            # Audit log: write rejected article so it appears in filter log
+            supa_upsert({
+                "url":            article_url,
+                "raw_title":      title[:300],
+                "source":         "press_release",
+                "company":        company,
+                "article_date":   pub_date,
+                "fetched_at":     datetime.now(timezone.utc).isoformat(),
+                "indication":     "filtered",
+                "relevance_score": 1,
+                "filter_reason":  "no_keyword_match",
+                "processed_at":   datetime.now(timezone.utc).isoformat(),
+            })
+            print(f"    ⏭  {pub_date} | {title[:60]} [no keyword match]")
             continue
 
         supa_upsert({
@@ -187,7 +201,21 @@ def scrape_lilly_rss(known_urls, cutoff):
         link    = (item.findtext("link")  or "").strip()
         pubdate = (item.findtext("pubDate") or "")[:16]
         if not link or link in known_urls: continue
-        if not is_relevant(title):        continue
+        if not is_relevant(title):
+            supa_upsert({
+                "url":            link,
+                "raw_title":      title[:300],
+                "source":         "press_release",
+                "company":        "Eli Lilly",
+                "article_date":   pub_date,
+                "fetched_at":     datetime.now(timezone.utc).isoformat(),
+                "indication":     "filtered",
+                "relevance_score": 1,
+                "filter_reason":  "no_keyword_match",
+                "processed_at":   datetime.now(timezone.utc).isoformat(),
+            })
+            print(f"    ⏭  {pub_date} | {title[:60]} [no keyword match]")
+            continue
         try:
             pub_date = datetime.strptime(pubdate, "%a, %d %b %Y").strftime("%Y-%m-%d")
         except:

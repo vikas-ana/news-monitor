@@ -179,8 +179,9 @@ def process_article(article):
     if not is_in_scope(text):
         print(f"  ⏭  Out of scope — skipping")
         updates["relevance_score"] = 1
-        updates["category"] = "out_of_scope"
-        updates["processed_at"] = datetime.now(timezone.utc).isoformat()
+        updates["category"]        = "out_of_scope"
+        updates["filter_reason"]   = "out_of_scope"
+        updates["processed_at"]    = datetime.now(timezone.utc).isoformat()
         return updates, []
 
     # ── Step 1: Extract product / company / phase ──────────────────────────────
