@@ -341,6 +341,12 @@ Write 3-4 sentences of flowing narrative. Cover: what this drug is and what it t
 ---
 Rules: Every sentence names a drug, company, date, or number. No vague phrases. No paragraphs in IMPLICATIONS or KEY EVENTS — only bullets there.
 
+SOURCE TAGGING (important for transparency):
+- Wrap any text drawn from KNOWLEDGE BASE (wiki pages) in [W]...[/W] tags
+- Wrap any text drawn from COMPETITIVE LANDSCAPE (Neo4j graph) in [N]...[/N] tags
+- Text from the article itself needs no tags
+Example: "Sotyktu is a [W]TYK2 inhibitor approved in 2022[/W] competing with [N]Skyrizi and Tremfya in plaque psoriasis[/N]."
+
 ARTICLE (Score {score}/10, {date}):
 Title: {title}
 Drug: {drug} | Company: {company} | Indication: {ind}
@@ -441,21 +447,37 @@ def deduplicate_alerts(articles):
     return groups
 
 # -- HTML builders ------------------------------------------------------------
+WIKI_SPAN  = '<span style="background:#e3f2fd;border-bottom:2px solid #1565c0;" title="Source: wiki knowledge base">'
+NEO4J_SPAN = '<span style="background:#e8f5e9;border-bottom:2px solid #2e7d32;" title="Source: Neo4j competitive graph">'
+SPAN_END   = '</span>'
+LEGEND_HTML = (
+    '<p style="margin:12px 0 0 0;font-size:11px;color:#999;border-top:1px solid #eee;padding-top:8px;">'
+    '<span style="background:#e3f2fd;border-bottom:2px solid #1565c0;padding:0 4px;">W</span> wiki &nbsp;'
+    '<span style="background:#e8f5e9;border-bottom:2px solid #2e7d32;padding:0 4px;">N</span> Neo4j graph &nbsp;'
+    'untagged = article</p>'
+)
+
+def apply_source_tags(text):
+    """Convert [W]...[/W] and [N]...[/N] LLM tags to HTML highlight spans."""
+    text = re.sub(r'\[W\](.*?)\[/W\]', lambda m: WIKI_SPAN + m.group(1) + SPAN_END, text, flags=re.DOTALL)
+    text = re.sub(r'\[N\](.*?)\[/N\]', lambda m: NEO4J_SPAN + m.group(1) + SPAN_END, text, flags=re.DOTALL)
+    return text
+
 def alert_md_to_html(text):
-    """Convert the structured **SECTION:** markdown alert to styled HTML."""
+    """Convert the structured **SECTION:** markdown alert to styled HTML with source highlights."""
     if not text:
         return ""
+    # Apply source highlight tags first
+    text = apply_source_tags(text)
+    has_tags = '[W]' in text or '[N]' in text or WIKI_SPAN in text or NEO4J_SPAN in text
+
     # Split on section headings: **TITLE:**, **WHAT'S CHANGED:**, etc.
     section_pattern = re.compile(r'\*\*([A-Z &\']+):\*\*', re.IGNORECASE)
     parts = section_pattern.split(text.strip())
-    # parts alternates: [pre-text, heading, body, heading, body, ...]
     html_parts = []
-    i = 0
+    i = 1 if not parts[0].strip() else 0
     if parts[0].strip():
-        # text before first heading (shouldn't happen normally)
         html_parts.append(f'<p style="margin:0 0 8px 0;font-size:14px;">{parts[0].strip()}</p>')
-        i = 1
-    else:
         i = 1
 
     while i < len(parts) - 1:
@@ -465,27 +487,28 @@ def alert_md_to_html(text):
 
         if heading.upper() == "TITLE":
             html_parts.append(
-                f'<h3 style="margin:0 0 12px 0;font-size:16px;color:#1a1a2e;border-bottom:2px solid #ffc107;padding-bottom:6px;">{body}</h3>')
+                f'<h3 style="margin:0 0 12px 0;font-size:16px;color:#1a1a2e;'
+                f'border-bottom:2px solid #ffc107;padding-bottom:6px;">{body}</h3>')
         else:
-            # Convert bullet lines (• or - ) to <li>
             lines = body.split('\n')
             prose_lines, bullet_lines = [], []
             for ln in lines:
                 ln = ln.strip()
                 if not ln:
                     continue
-                if ln.startswith(('•', '-', '*') ) and not ln.startswith('**'):
+                if ln.startswith(('•', '-', '*')) and not ln.startswith('**'):
                     bullet_lines.append(ln.lstrip('•-* ').strip())
                 else:
                     prose_lines.append(ln)
 
             body_html = ""
             if prose_lines:
-                body_html += '<p style="margin:0 0 8px 0;font-size:14px;line-height:1.6;color:#333;">' + \
-                    ' '.join(prose_lines) + '</p>'
+                body_html += ('<p style="margin:0 0 8px 0;font-size:14px;line-height:1.6;color:#333;">'
+                              + ' '.join(prose_lines) + '</p>')
             if bullet_lines:
                 items = ''.join(f'<li style="margin-bottom:5px;">{b}</li>' for b in bullet_lines)
-                body_html += f'<ul style="margin:4px 0 8px 16px;padding:0;font-size:14px;line-height:1.5;color:#333;">{items}</ul>'
+                body_html += (f'<ul style="margin:4px 0 8px 16px;padding:0;font-size:14px;'
+                              f'line-height:1.5;color:#333;">{items}</ul>')
 
             html_parts.append(f'''
             <div style="margin-bottom:12px;">
@@ -493,6 +516,10 @@ def alert_md_to_html(text):
                          letter-spacing:0.05em;color:#888;">{heading}</p>
               {body_html}
             </div>''')
+
+    # Add legend only if the LLM actually used source tags
+    if has_tags:
+        html_parts.append(LEGEND_HTML)
 
     return ''.join(html_parts)
 

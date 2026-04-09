@@ -283,6 +283,12 @@ Write 3-4 sentences of flowing narrative. Cover: what this drug is and what it t
 
 ---
 Rules: Every sentence names a drug, company, date, or number. No vague phrases. No paragraphs in IMPLICATIONS or KEY EVENTS — only bullets there.
+
+SOURCE TAGGING (important for transparency):
+- Wrap any text drawn from KNOWLEDGE BASE (wiki pages) in [W]...[/W] tags
+- Wrap any text drawn from COMPETITIVE LANDSCAPE (Neo4j graph) in [N]...[/N] tags
+- Text from the article itself needs no tags
+Example: "Sotyktu is a [W]TYK2 inhibitor approved in 2022[/W] competing with [N]Skyrizi and Tremfya in plaque psoriasis[/N]."
 """
 
 def generate_alert(article, rag_articles_ctx="", neo4j_ctx="", wiki_ctx="", price_info=None):
@@ -411,7 +417,20 @@ for i, a in enumerate(selected):
 SCORE_COLOR = {10:"#c0392b",9:"#e74c3c",8:"#e67e22",7:"#f39c12",
                6:"#27ae60",5:"#2980b9",4:"#7f8c8d"}
 
+WIKI_SPAN_CMP  = ('<span style="background:#e3f2fd;border-bottom:2px solid #1565c0;" '
+                  'title="Source: wiki knowledge base">')
+NEO4J_SPAN_CMP = ('<span style="background:#e8f5e9;border-bottom:2px solid #2e7d32;" '
+                  'title="Source: Neo4j competitive graph">')
+LEGEND_CMP = ('<p style="margin:10px 0 0 0;font-size:11px;color:#999;border-top:1px solid #ddd;padding-top:6px;">'
+              '<span style="background:#e3f2fd;border-bottom:2px solid #1565c0;padding:0 4px;">W</span> wiki &nbsp;'
+              '<span style="background:#e8f5e9;border-bottom:2px solid #2e7d32;padding:0 4px;">N</span> Neo4j &nbsp;'
+              'untagged = article</p>')
+
 def md_to_html(text):
+    # Apply source highlighting tags
+    has_tags = '[W]' in text or '[N]' in text
+    text = re.sub(r'\[W\](.*?)\[/W\]', lambda m: WIKI_SPAN_CMP + m.group(1) + '</span>', text, flags=re.DOTALL)
+    text = re.sub(r'\[N\](.*?)\[/N\]', lambda m: NEO4J_SPAN_CMP + m.group(1) + '</span>', text, flags=re.DOTALL)
     text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
     text = re.sub(r'\*(.+?)\*', r'<em>\1</em>', text)
     lines = text.split('\n')
@@ -427,6 +446,8 @@ def md_to_html(text):
     html = '\n'.join(out)
     html = re.sub(r'(<li[^>]*>.*?</li>\s*)+',
                   lambda m: f'<ul style="margin:4px 0 10px 18px;padding:0">{m.group(0)}</ul>', html)
+    if has_tags:
+        html += LEGEND_CMP
     return html
 
 def alert_card(text, label, badge_color, bg_color, border_color, company, date, score, url, price_info=None):
