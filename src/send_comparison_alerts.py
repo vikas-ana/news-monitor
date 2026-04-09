@@ -275,17 +275,36 @@ Write the structured alert:"""
 # ── Load & select articles ────────────────────────────────────────────────────
 articles = json.load(open("/tmp/articles_for_alert.json"))
 
-seen_companies = set()
+def dedup_key(a):
+    """
+    Same story = same drug (or same company if no drug) within a 7-day window.
+    Use (drug_or_company, week_bucket) as the dedup key so we pick only the
+    highest-scoring article per unique event.
+    """
+    drug = (a.get("product_name") or "").strip().lower()
+    co   = (a.get("company") or "").strip().lower()
+    date = (a.get("article_date") or "1970-01-01")
+    # bucket by week (YYYY-WW) so Apr 4 and Apr 6 same-drug stories collapse
+    try:
+        from datetime import datetime
+        week = datetime.strptime(date, "%Y-%m-%d").strftime("%Y-W%W")
+    except:
+        week = date[:7]
+    key = drug if drug else co
+    return f"{key}|{week}"
+
+# Sort best score first, then deduplicate by event key
+seen_events = set()
 selected = []
 for a in sorted(articles, key=lambda x: -(x.get("relevance_score") or 0)):
-    co = a.get("company","")
-    if co not in seen_companies:
+    key = dedup_key(a)
+    if key not in seen_events:
         selected.append(a)
-        seen_companies.add(co)
+        seen_events.add(key)
     if len(selected) >= 5:
         break
 
-print(f"Selected {len(selected)} articles:")
+print(f"Selected {len(selected)} articles (deduped by drug+week):")
 for a in selected:
     print(f"  [{a['relevance_score']}] {a['company']} — {(a.get('catchy_title') or a.get('raw_title',''))[:65]}")
 

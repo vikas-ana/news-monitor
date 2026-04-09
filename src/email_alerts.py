@@ -385,14 +385,25 @@ def deduplicate_alerts(articles):
 
     sorted_arts = sorted(articles, key=lambda x: x.get("relevance_score") or 0, reverse=True)
 
+    from datetime import datetime as _dt, timedelta as _td
+    def _parse_date(s):
+        try: return _dt.strptime(s, "%Y-%m-%d")
+        except: return None
+
     for i, a in enumerate(sorted_arts):
         if i in used: continue
         dups = []
+        d_a = _parse_date(a.get("article_date",""))
         for j, b in enumerate(sorted_arts):
             if i == j or j in used: continue
-            same_drug = (a.get("product_name") or "").lower() == (b.get("product_name") or "").lower()
-            same_day  = a.get("article_date") == b.get("article_date")
-            if same_drug and same_day:
+            # Same drug (or same company if no drug tagged)
+            drug_a = (a.get("product_name") or a.get("company") or "").lower().strip()
+            drug_b = (b.get("product_name") or b.get("company") or "").lower().strip()
+            same_drug = drug_a and drug_b and drug_a == drug_b
+            # Within 7-day window (same story can generate coverage over several days)
+            d_b = _parse_date(b.get("article_date",""))
+            within_window = d_a and d_b and abs((d_a - d_b).days) <= 7
+            if same_drug and within_window:
                 t1 = a.get("catchy_title") or a.get("raw_title") or ""
                 t2 = b.get("catchy_title") or b.get("raw_title") or ""
                 if same_event(t1, t2):
