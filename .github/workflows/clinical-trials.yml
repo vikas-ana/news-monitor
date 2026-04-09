@@ -30,8 +30,6 @@ jobs:
 
       - name: Step 1 — Fetch & diff ClinicalTrials.gov
         run: python src/trials_monitor.py
-        # First run: full history load
-        # Subsequent runs: incremental (last 2 days only) — runs in ~30 seconds
 
       # Trial email alerts disabled — re-enable when trial data quality is verified
       # - name: Step 2 — Send trial alerts via email

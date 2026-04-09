@@ -329,13 +329,24 @@ def cleanup_stale():
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--cleanup", action="store_true",
+                        help="One-off: remove stale records left by old monitor, then exit")
+    args = parser.parse_args()
+
     now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     print(f"\n=== ClinicalTrials.gov Monitor v3 — {now_str} ===")
+
+    if args.cleanup:
+        print("Mode: one-off cleanup only")
+        print("=" * 60)
+        cleanup_stale()
+        print("Done.")
+        return
+
     print("Mode: today's updates only · version-diff · LLM-judged")
     print("=" * 60)
-
-    # Step 0: clean up stale records first
-    cleanup_stale()
 
     now = datetime.now(timezone.utc).isoformat()
     new_alert_count = upd_alert_count = skip_count = 0
