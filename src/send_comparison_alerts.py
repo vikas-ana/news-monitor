@@ -257,27 +257,32 @@ def get_neo4j_context(drug, company):
         return ""
 
 # ── Prompt ────────────────────────────────────────────────────────────────────
-FORMAT_PROMPT = """You are a pharma competitive intelligence analyst. Write a structured alert in EXACTLY this format (use the exact headings and style):
+FORMAT_PROMPT = """You are a senior pharma competitive intelligence analyst. Write a structured alert using EXACTLY these four sections.
 
-**TITLE:** [drug/company + specific event — max 12 words]
+IMPORTANT: WHAT'S CHANGED and BACKGROUND & CONTEXT must be written as flowing prose sentences — NOT bullet points.
+
+---
+
+**TITLE:** [Drug name + what happened, max 12 words]
 
 **WHAT'S CHANGED:**
-[1-2 clear sentences. State the specific new development — data readout, approval, trial start, label change. Be explicit about what is new today versus what was known before. Use the drug name and company name.]
+Write 2 sentences of plain prose. First sentence: what is the specific new development (use the drug name, company name, exact event). Second sentence: what this means vs. what was known before — be explicit about the delta.
 
 **BACKGROUND & CONTEXT:**
-[3-4 sentences of flowing narrative. What is this drug, what indication does it treat, what is its mechanism, how does it compare to competitors, and where does the company sit in the landscape. Draw on the competitive context provided — name rivals, their drugs, their development stage.]
+Write 3-4 sentences of flowing narrative. Cover: what this drug is and what it treats, its mechanism of action, where the company stands in the competitive landscape (name specific rivals and their drugs), and any relevant history. Use the knowledge base context provided.
 
 **IMPLICATIONS & NEXT STEPS:**
-• [Who gains from this news and why — name the company/drug specifically]
-• [Who faces competitive pressure — name them and the indication affected]
-• [What the company is expected to do next — NDA, launch, Phase 3 expansion, label update]
+• [Name the specific winner — company or drug — and exactly why they benefit]
+• [Name the specific loser — competitor facing pressure — and the indication affected]
+• [What the reporting company does next — NDA filing, Phase 3 start, launch date, label expansion]
 
 **KEY EVENTS TO WATCH:**
-• [Next specific milestone with date if known — FDA decision, Phase 3 readout, launch]
-• [Competitor catalyst that could shift the picture — trial result, approval, label change]
-• [Regulatory or market trigger — payer decision, safety review, PDUFA date]
+• [Next milestone with a date — FDA PDUFA, Phase 3 readout, launch quarter]
+• [Key competitor event that changes the picture — trial result, approval, launch]
+• [Broader market or regulatory trigger — payer coverage, safety review, label update]
 
-Be specific throughout: drug names, company names, percentages, trial names, dates. No vague phrases like "significant development" or "important milestone".
+---
+Rules: Every sentence names a drug, company, date, or number. No vague phrases. No paragraphs in IMPLICATIONS or KEY EVENTS — only bullets there.
 """
 
 def generate_alert(article, rag_articles_ctx="", neo4j_ctx="", wiki_ctx="", price_info=None):
@@ -310,7 +315,7 @@ Content excerpt: {content[:700]}
 {ctx_block}
 Write the structured alert:"""
 
-    return groq(FORMAT_PROMPT + "\n" + user, max_tokens=700)
+    return groq(FORMAT_PROMPT + "\n" + user, max_tokens=1000)
 
 # ── Load & select articles ────────────────────────────────────────────────────
 articles = json.load(open("/tmp/articles_for_alert.json"))
