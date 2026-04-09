@@ -19,7 +19,6 @@ from datetime import datetime, timezone, timedelta
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_KEY"]
-GROQ_KEY     = os.environ.get("GROQ_KEY", "")
 
 INDICATIONS = {
     "RA":       "Rheumatoid Arthritis",
@@ -77,21 +76,6 @@ def supa_delete(table, filter_str):
 
 def short_hash(obj):
     return hashlib.md5(json.dumps(obj, sort_keys=True).encode()).hexdigest()[:12]
-
-def groq_call(prompt, max_tokens=120):
-    if not GROQ_KEY: return ""
-    payload = json.dumps({"model": "llama-3.1-8b-instant", "max_tokens": max_tokens,
-        "temperature": 0, "messages": [{"role": "user", "content": prompt}]})
-    r = subprocess.run(["curl", "-s", "--max-time", "30",
-        "https://api.groq.com/openai/v1/chat/completions",
-        "-H", f"Authorization: Bearer {GROQ_KEY}",
-        "-H", "Content-Type: application/json", "-d", payload],
-        capture_output=True, text=True)
-    try:
-        d = json.loads(r.stdout)
-        if "choices" in d: return d["choices"][0]["message"]["content"].strip()
-    except: pass
-    return ""
 
 # ── Parse study JSON → flat record ────────────────────────────────────────────
 
@@ -185,57 +169,72 @@ def fetch_updated_today(ind_key, condition_str):
 # current API response against our stored Supabase snapshot.
 
 
-# ── LLM: is this diff alert-worthy? ──────────────────────────────────────────
+# ── Rule-based alert judge (no LLM needed) ────────────────────────────────────
 
-def llm_judge(nct_id, sponsor, brief_title, indication, changes):
+# Status values that always trigger an alert when they appear as the NEW status
+ALERT_STATUSES = {
+    "ACTIVE_NOT_RECRUITING",
+    "COMPLETED",
+    "TERMINATED",
+    "SUSPENDED",
+    "WITHDRAWN",
+}
+
+def rule_judge(nct_id, sponsor, brief_title, indication, changes, rec, stored_rec):
     """
-    Ask Groq whether the observed changes are competitive-intelligence-worthy.
+    Pure rule-based alert decision — no LLM, no API calls, zero cost.
     Returns (is_alert: bool, summary: str)
     """
     if not changes:
         return False, ""
 
-    changes_text = "\n".join(f"  - {c}" for c in changes)
+    reasons = []
 
-    prompt = f"""You are a pharma competitive intelligence analyst reviewing a clinical trial update.
+    # Rule 1: Status flipped to a significant state
+    new_status = (rec.get("overall_status") or "").upper().replace(" ", "_")
+    old_status  = (stored_rec.get("overall_status") or "").upper().replace(" ", "_")
+    if new_status != old_status and new_status in ALERT_STATUSES:
+        reasons.append(f"Status changed: {stored_rec.get('overall_status')} → {rec.get('overall_status')}")
 
-Trial: {nct_id}
-Title: {brief_title[:120]}
-Sponsor: {sponsor}
-Indication: {indication}
+    # Rule 2: Enrollment changed by >20%
+    old_enr = stored_rec.get("enrollment_count")
+    new_enr = rec.get("enrollment_count")
+    if old_enr and new_enr and old_enr > 0:
+        pct_change = abs(new_enr - old_enr) / old_enr
+        if pct_change > 0.20:
+            reasons.append(f"Enrollment changed {old_enr}→{new_enr} ({pct_change*100:.0f}%)")
 
-Changes detected between last 2 versions:
-{changes_text}
+    # Rule 3: Phase changed
+    old_phase = (stored_rec.get("phase") or "").strip()
+    new_phase  = (rec.get("phase") or "").strip()
+    if old_phase and new_phase and old_phase != new_phase:
+        reasons.append(f"Phase changed: {old_phase} → {new_phase}")
 
-ALERT-WORTHY (answer ALERT):
-- Status changed to Completed, Terminated, Active not recruiting, Suspended
-- Primary endpoint measures changed (not just time frames)
-- New drug arm or intervention added/removed
-- Enrollment target changed by >20%
-- Phase changed
-- Primary completion date moved significantly (>6 months)
+    # Rule 4: Drug/intervention arms changed
+    if "Drug/intervention arms" in " ".join(changes):
+        reasons.append("Drug arms or interventions changed")
 
-NOT alert-worthy (answer SKIP):
-- Administrative text edits or typo fixes
-- Minor wording in eligibility criteria
-- Contact/location updates
-- Date format corrections
-- No change to actual drug, endpoint, status, or enrollment
+    # Rule 5: Primary endpoints changed
+    if "Primary endpoints" in " ".join(changes):
+        reasons.append("Primary endpoints changed")
 
-Reply with exactly:
-ALERT: [one sentence — what changed and why it matters for pharma competitive intelligence]
-or
-SKIP: [brief reason]"""
+    # Rule 6: Primary completion date shifted by >6 months
+    from datetime import datetime as _dt
+    old_date = stored_rec.get("primary_completion_date") or ""
+    new_date  = rec.get("primary_completion_date") or ""
+    if old_date and new_date and old_date != new_date:
+        try:
+            delta = abs((_dt.fromisoformat(new_date) - _dt.fromisoformat(old_date)).days)
+            if delta > 180:
+                reasons.append(f"Primary completion date shifted {delta} days: {old_date} → {new_date}")
+        except Exception:
+            pass
 
-    resp = groq_call(prompt, max_tokens=100)
-    if resp:
-        upper = resp.upper()
-        if upper.startswith("ALERT:"):
-            return True, resp[6:].strip()
-        if upper.startswith("ALERT"):
-            # model sometimes skips the colon
-            return True, resp[5:].strip()
-    return False, ""
+    if not reasons:
+        return False, ""
+
+    summary = f"{brief_title[:80]} ({indication}): " + "; ".join(reasons)
+    return True, summary
 
 # ── Cleanup: remove stale/meaningless records ─────────────────────────────────
 
@@ -399,10 +398,10 @@ def main():
                     print(f"  ⬜ {nct}: no alert-field changes — skipping")
                     continue
 
-                # Step 2: LLM judges the diff
-                is_alert, summary = llm_judge(
-                    nct, rec["sponsor"], rec["brief_title"], ind_key, changes)
-                time.sleep(0.5)
+                # Step 2: Rule-based judge (no LLM — pure field comparison)
+                is_alert, summary = rule_judge(
+                    nct, rec["sponsor"], rec["brief_title"], ind_key,
+                    changes, rec, stored[nct])
 
                 row.update({
                     "record_type":   "Trial Update",
