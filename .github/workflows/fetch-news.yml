@@ -21,6 +21,7 @@ jobs:
       SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
       GROQ_KEY: ${{ secrets.GROQ_KEY }}
       JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
+      ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_KEY }}
       NEO4J_URI: neo4j+s://e56a592d.databases.neo4j.io
       NEO4J_USER: ${{ secrets.NEO4J_USER }}
       NEO4J_PASS: ${{ secrets.NEO4J_PASS }}
@@ -67,8 +68,8 @@ jobs:
         run: python src/load_neo4j.py
         continue-on-error: true
 
-      - name: Step 5 — Send email alerts (score >= 7, RAG-enriched)
-        run: python src/email_alerts.py
+      - name: Step 5 — Send email alerts (news + trials, score >= 7, RAG-enriched)
+        run: python src/email_alerts.py --source all
         continue-on-error: true
 
       - name: Commit backup JSON

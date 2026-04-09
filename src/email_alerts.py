@@ -23,8 +23,9 @@ SUPABASE_KEY = os.environ["SUPABASE_KEY"]
 GMAIL_USER   = os.environ["GMAIL_USER"]
 GMAIL_PASS   = os.environ["GMAIL_APP_PASS"]
 ALERT_TO     = os.environ.get("ALERT_EMAIL", os.environ["GMAIL_USER"])
-GROQ_KEY     = os.environ.get("GROQ_KEY", "")
-JINA_API_KEY = os.environ.get("JINA_API_KEY", "")
+GROQ_KEY      = os.environ.get("GROQ_KEY", "")
+JINA_API_KEY  = os.environ.get("JINA_API_KEY", "")
+ANTHROPIC_KEY = os.environ.get("ANTHROPIC_KEY", "")
 NEO4J_URI    = os.environ.get("NEO4J_URI",  "neo4j+s://e56a592d.databases.neo4j.io")
 NEO4J_USER   = os.environ.get("NEO4J_USER", "")
 NEO4J_PASS   = os.environ.get("NEO4J_PASS", "")
@@ -80,18 +81,40 @@ def curl_get(url):
     except: return {}
 
 def groq_call(prompt, max_tokens=10, model="llama-3.1-8b-instant"):
-    if not GROQ_KEY: return None
-    payload = json.dumps({"model": model, "max_tokens": max_tokens,
-        "temperature": 0, "messages": [{"role": "user", "content": prompt}]})
-    r = subprocess.run(["curl","-s","--max-time","30",
-        "https://api.groq.com/openai/v1/chat/completions",
-        "-H",f"Authorization: Bearer {GROQ_KEY}",
-        "-H","Content-Type: application/json","-d",payload],
-        capture_output=True, text=True)
-    try:
-        d = json.loads(r.stdout)
-        if "choices" in d: return d["choices"][0]["message"]["content"].strip()
-    except: pass
+    # Try Groq first
+    if GROQ_KEY:
+        payload = json.dumps({"model": model, "max_tokens": max_tokens,
+            "temperature": 0, "messages": [{"role": "user", "content": prompt}]})
+        r = subprocess.run(["curl","-s","--max-time","30",
+            "https://api.groq.com/openai/v1/chat/completions",
+            "-H",f"Authorization: Bearer {GROQ_KEY}",
+            "-H","Content-Type: application/json","-d",payload],
+            capture_output=True, text=True)
+        try:
+            d = json.loads(r.stdout)
+            if "choices" in d:
+                return d["choices"][0]["message"]["content"].strip()
+            if "error" in d:
+                print(f"  Groq error ({model}): {d['error'].get('message','?')[:80]} — trying Haiku fallback")
+        except: pass
+
+    # Fallback: Claude Haiku
+    if ANTHROPIC_KEY:
+        payload = json.dumps({"model": "claude-haiku-4-5", "max_tokens": max_tokens,
+            "temperature": 0, "messages": [{"role": "user", "content": prompt}]})
+        r = subprocess.run(["curl","-s","--max-time","30",
+            "https://api.anthropic.com/v1/messages",
+            "-H",f"x-api-key: {ANTHROPIC_KEY}",
+            "-H","anthropic-version: 2023-06-01",
+            "-H","Content-Type: application/json","-d",payload],
+            capture_output=True, text=True)
+        try:
+            d = json.loads(r.stdout)
+            if "content" in d:
+                print("  [Haiku fallback used]")
+                return d["content"][0]["text"].strip()
+        except: pass
+
     return None
 
 # -- RAG: Jina embedding + Supabase similarity search ------------------------
