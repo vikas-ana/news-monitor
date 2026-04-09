@@ -72,25 +72,36 @@ GMAIL_PASS = os.environ.get("GMAIL_APP_PASS", "")
 ALERT_EMAIL = os.environ.get("ALERT_EMAIL", GMAIL_USER)
 
 # ── LLM ───────────────────────────────────────────────────────────────────────
-def groq(prompt, max_tokens=600):
+def groq(prompt, max_tokens=600, retries=3):
     payload = json.dumps({
         "model": "llama-3.3-70b-versatile",
         "max_tokens": max_tokens, "temperature": 0.3,
         "messages": [{"role": "user", "content": prompt}]
     })
-    r = subprocess.run(["curl", "-s", "--max-time", "45",
-        "https://api.groq.com/openai/v1/chat/completions",
-        "-H", f"Authorization: Bearer {GROQ_KEY}",
-        "-H", "Content-Type: application/json", "-d", payload],
-        capture_output=True, text=True)
-    try:
-        d = json.loads(r.stdout)
-        if "choices" in d: return d["choices"][0]["message"]["content"].strip()
-        # Log Groq errors so they show in workflow logs
-        if "error" in d:
-            print(f"  ⚠️  Groq error: {d['error'].get('message','unknown')[:120]}")
-    except Exception as e:
-        print(f"  ⚠️  Groq parse error: {e} | raw: {r.stdout[:200]}")
+    for attempt in range(1, retries + 1):
+        r = subprocess.run(["curl", "-s", "--max-time", "60",
+            "https://api.groq.com/openai/v1/chat/completions",
+            "-H", f"Authorization: Bearer {GROQ_KEY}",
+            "-H", "Content-Type: application/json", "-d", payload],
+            capture_output=True, text=True)
+        try:
+            d = json.loads(r.stdout)
+            if "choices" in d:
+                return d["choices"][0]["message"]["content"].strip()
+            if "error" in d:
+                msg = d['error'].get('message', 'unknown')
+                code = d['error'].get('code', '')
+                print(f"  ⚠️  Groq error (attempt {attempt}/{retries}): [{code}] {msg[:150]}")
+                # Rate limit — wait longer before retry
+                wait = 30 if "rate" in msg.lower() or code in ("rate_limit_exceeded","too_many_requests") else 10
+                if attempt < retries:
+                    print(f"  ↩️  Retrying in {wait}s...")
+                    time.sleep(wait)
+                continue
+        except Exception as e:
+            print(f"  ⚠️  Groq parse error (attempt {attempt}): {e} | raw: {r.stdout[:200]}")
+            if attempt < retries:
+                time.sleep(10)
     return ""
 
 # ── Supabase helpers ──────────────────────────────────────────────────────────
@@ -397,14 +408,16 @@ for i, a in enumerate(selected):
     # Version A: RAG + Neo4j, NO wiki
     print("  [A] Generating without wiki...")
     alert_a = generate_alert(a, rag_ctx, neo4j_ctx, wiki_ctx="", price_info=price_info)
-    time.sleep(3)
+    print(f"  [A] {'OK — {len(alert_a)} chars' if alert_a else 'EMPTY — Groq failed'}")
+    time.sleep(20)  # give Groq TPM counter time to refill between calls
 
     # Version B: RAG + Neo4j + Wiki
     print("  [B] Fetching wiki context...")
     wiki_ctx  = get_wiki_context(a)
     print("  [B] Generating with wiki...")
     alert_b   = generate_alert(a, rag_ctx, neo4j_ctx, wiki_ctx, price_info=price_info)
-    time.sleep(3)
+    print(f"  [B] {'OK — {len(alert_b)} chars' if alert_b else 'EMPTY — Groq failed'}")
+    time.sleep(20)  # give Groq TPM counter time to refill between calls
 
     results.append({
         "article":   a,
