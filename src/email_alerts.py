@@ -7,7 +7,7 @@ Email alerts v3
 - LLM dedup check: uses Groq to confirm if two articles are the same event
 """
 
-import os, json, subprocess, smtplib, sys, argparse, time
+import os, json, subprocess, smtplib, sys, argparse, time, re
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime
@@ -290,7 +290,7 @@ def get_neo4j_context(article):
 
     return "\n\n".join(parts)
 
-def generate_enriched_alert(article, rag_context, neo4j_context=""):
+def generate_enriched_alert(article, rag_context, neo4j_context="", price_info=None):
     """
     Use Groq + RAG context to generate a richer, more contextual alert_text.
     Only called for score >= 7 articles.
@@ -299,6 +299,7 @@ def generate_enriched_alert(article, rag_context, neo4j_context=""):
     title   = article.get("catchy_title") or article.get("raw_title") or ""
     summary = article.get("summary") or ""
     score   = article.get("relevance_score") or 0
+    date    = article.get("article_date") or ""
     drug    = article.get("product_name") or ""
     company = article.get("company") or ""
     ind     = article.get("indication") or ""
@@ -307,27 +308,51 @@ def generate_enriched_alert(article, rag_context, neo4j_context=""):
     rag_section    = ("KNOWLEDGE BASE (wiki + similar articles):\n" + rag_context[:1200]) if rag_context else ""
     neo4j_section  = ("COMPETITIVE LANDSCAPE (Neo4j knowledge graph):\n" + neo4j_context[:800]) if neo4j_context else ""
 
-    prompt = f"""You are a pharma intelligence analyst generating competitive intelligence alerts.
+    price_line = ""
+    if price_info:
+        price_line = (f"\nShare price at time of alert: {price_info['ticker']} "
+                      f"${price_info['price']:.2f} ({price_info['arrow']}"
+                      f"{abs(price_info['change_pct']):.1f}% today)\n")
 
-ARTICLE:
+    prompt = f"""You are a senior pharma competitive intelligence analyst. Write a structured alert using EXACTLY these four sections.
+
+IMPORTANT: WHAT'S CHANGED and BACKGROUND & CONTEXT must be written as flowing prose sentences — NOT bullet points.
+
+---
+
+**TITLE:** [Drug name + what happened, max 12 words]
+
+**WHAT'S CHANGED:**
+Write 2 sentences of plain prose. First sentence: what is the specific new development (use the drug name, company name, exact event). Second sentence: what this means vs. what was known before — be explicit about the delta.
+
+**BACKGROUND & CONTEXT:**
+Write 3-4 sentences of flowing narrative. Cover: what this drug is and what it treats, its mechanism of action, where the company stands in the competitive landscape (name specific rivals and their drugs), and any relevant history. Use the knowledge base context provided.
+
+**IMPLICATIONS & NEXT STEPS:**
+• [Name the specific winner — company or drug — and exactly why they benefit]
+• [Name the specific loser — competitor facing pressure — and the indication affected]
+• [What the reporting company does next — NDA filing, Phase 3 start, launch date, label expansion]
+
+**KEY EVENTS TO WATCH:**
+• [Next milestone with a date — FDA PDUFA, Phase 3 readout, launch quarter]
+• [Key competitor event that changes the picture — trial result, approval, launch]
+• [Broader market or regulatory trigger — payer coverage, safety review, label update]
+
+---
+Rules: Every sentence names a drug, company, date, or number. No vague phrases. No paragraphs in IMPLICATIONS or KEY EVENTS — only bullets there.
+
+ARTICLE (Score {score}/10, {date}):
 Title: {title}
-Drug: {drug} | Company: {company} | Indication: {ind} | Score: {score}/10
+Drug: {drug} | Company: {company} | Indication: {ind}
 Summary: {summary[:600]}
-Existing alert: {existing_alert[:300]}
-
+{price_line}
 {rag_section}
 
 {neo4j_section}
 
-Write a concise alert (2-3 sentences) covering:
-1. What happened and why it matters competitively
-2. How it relates to the competitive landscape (reference context if relevant)
-3. What to watch next
+Now write the structured alert:"""
 
-Be specific, use drug names and company names. Do not use generic phrases like "important development".
-Return ONLY the alert text, no preamble."""
-
-    return groq_call(prompt, max_tokens=250, model="llama-3.1-8b-instant")
+    return groq_call(prompt, max_tokens=800, model="llama-3.3-70b-versatile")
 
 # -- Share price enrichment ---------------------------------------------------
 _price_cache = {}
@@ -416,6 +441,62 @@ def deduplicate_alerts(articles):
     return groups
 
 # -- HTML builders ------------------------------------------------------------
+def alert_md_to_html(text):
+    """Convert the structured **SECTION:** markdown alert to styled HTML."""
+    if not text:
+        return ""
+    # Split on section headings: **TITLE:**, **WHAT'S CHANGED:**, etc.
+    section_pattern = re.compile(r'\*\*([A-Z &\']+):\*\*', re.IGNORECASE)
+    parts = section_pattern.split(text.strip())
+    # parts alternates: [pre-text, heading, body, heading, body, ...]
+    html_parts = []
+    i = 0
+    if parts[0].strip():
+        # text before first heading (shouldn't happen normally)
+        html_parts.append(f'<p style="margin:0 0 8px 0;font-size:14px;">{parts[0].strip()}</p>')
+        i = 1
+    else:
+        i = 1
+
+    while i < len(parts) - 1:
+        heading = parts[i].strip()
+        body    = parts[i + 1].strip() if i + 1 < len(parts) else ""
+        i += 2
+
+        if heading.upper() == "TITLE":
+            html_parts.append(
+                f'<h3 style="margin:0 0 12px 0;font-size:16px;color:#1a1a2e;border-bottom:2px solid #ffc107;padding-bottom:6px;">{body}</h3>')
+        else:
+            # Convert bullet lines (• or - ) to <li>
+            lines = body.split('\n')
+            prose_lines, bullet_lines = [], []
+            for ln in lines:
+                ln = ln.strip()
+                if not ln:
+                    continue
+                if ln.startswith(('•', '-', '*') ) and not ln.startswith('**'):
+                    bullet_lines.append(ln.lstrip('•-* ').strip())
+                else:
+                    prose_lines.append(ln)
+
+            body_html = ""
+            if prose_lines:
+                body_html += '<p style="margin:0 0 8px 0;font-size:14px;line-height:1.6;color:#333;">' + \
+                    ' '.join(prose_lines) + '</p>'
+            if bullet_lines:
+                items = ''.join(f'<li style="margin-bottom:5px;">{b}</li>' for b in bullet_lines)
+                body_html += f'<ul style="margin:4px 0 8px 16px;padding:0;font-size:14px;line-height:1.5;color:#333;">{items}</ul>'
+
+            html_parts.append(f'''
+            <div style="margin-bottom:12px;">
+              <p style="margin:0 0 4px 0;font-size:11px;font-weight:700;text-transform:uppercase;
+                         letter-spacing:0.05em;color:#888;">{heading}</p>
+              {body_html}
+            </div>''')
+
+    return ''.join(html_parts)
+
+
 def news_card(lead, dupes):
     score   = lead.get("relevance_score") or 0
     cat     = lead.get("category") or "unknown"
@@ -459,8 +540,7 @@ def news_card(lead, dupes):
       </div>
       <h3 style="margin:0 0 4px 0;font-size:15px;"><a href="{url}" style="color:#1a73e8;text-decoration:none;">{title}</a></h3>
       <p style="margin:0 0 10px 0;font-size:12px;color:#888;">{meta}</p>
-      <p style="margin:0 0 10px 0;font-size:14px;color:#333;line-height:1.5;">{summary}</p>
-      {"<div style='background:#fff8e1;border-left:4px solid #ffc107;padding:10px 14px;border-radius:0 4px 4px 0;font-size:13px;'><strong>⚠️ Alert:</strong> " + alert_t + "</div>" if alert_t else ""}
+      {f'<div style="background:#fffdf0;border:1px solid #e8e0c8;border-radius:6px;padding:14px 16px;margin-top:8px;">{alert_md_to_html(alert_t)}</div>' if alert_t else f'<p style="margin:0 0 10px 0;font-size:14px;color:#333;line-height:1.5;">{summary}</p>'}
       {dupes_html}
     </div>"""
 
@@ -631,7 +711,8 @@ def main():
             rag_ctx    = get_rag_context(lead) if JINA_API_KEY else ""
             neo4j_ctx  = get_neo4j_context(lead)
             if rag_ctx or neo4j_ctx:
-                enriched = generate_enriched_alert(lead, rag_ctx, neo4j_ctx)
+                pi = get_share_price(lead.get("company", ""))
+                enriched = generate_enriched_alert(lead, rag_ctx, neo4j_ctx, price_info=pi)
                 if enriched:
                     lead["alert_text"] = enriched
                     lead["_rag_enriched"] = True
