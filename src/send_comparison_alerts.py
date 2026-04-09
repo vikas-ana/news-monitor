@@ -257,37 +257,27 @@ def get_neo4j_context(drug, company):
         return ""
 
 # ── Prompt ────────────────────────────────────────────────────────────────────
-FORMAT_PROMPT = """Write a pharma intelligence alert. SHORT sentences. Bullet points only — no paragraphs. Plain English. Scannable in 30 seconds.
+FORMAT_PROMPT = """You are a pharma competitive intelligence analyst. Write a structured alert in EXACTLY this format (use the exact headings and style):
 
-Use EXACTLY this format:
-
-**TITLE:** [drug name + what happened — max 10 words]
+**TITLE:** [drug/company + specific event — max 12 words]
 
 **WHAT'S CHANGED:**
-• [One fact. What is new today that wasn't known before.]
-• [One more fact if needed. Keep it to the point.]
+[1-2 clear sentences. State the specific new development — data readout, approval, trial start, label change. Be explicit about what is new today versus what was known before. Use the drug name and company name.]
 
 **BACKGROUND & CONTEXT:**
-• [What this drug is. One sentence.]
-• [What company makes it. What indication it treats.]
-• [Where it sits vs competitors. One sentence.]
-• [MOA or phase. One sentence.]
+[3-4 sentences of flowing narrative. What is this drug, what indication does it treat, what is its mechanism, how does it compare to competitors, and where does the company sit in the landscape. Draw on the competitive context provided — name rivals, their drugs, their development stage.]
 
 **IMPLICATIONS & NEXT STEPS:**
-• [Who benefits. Name the company or drug specifically.]
-• [Who faces pressure. Name them.]
-• [What the company does next. NDA, Phase 3, launch, etc.]
+• [Who gains from this news and why — name the company/drug specifically]
+• [Who faces competitive pressure — name them and the indication affected]
+• [What the company is expected to do next — NDA, launch, Phase 3 expansion, label update]
 
 **KEY EVENTS TO WATCH:**
-• [Next specific milestone. Date if known.]
-• [Competitor response or competing readout. Date if known.]
-• [Regulatory or market event that changes the picture.]
+• [Next specific milestone with date if known — FDA decision, Phase 3 readout, launch]
+• [Competitor catalyst that could shift the picture — trial result, approval, label change]
+• [Regulatory or market trigger — payer decision, safety review, PDUFA date]
 
-Rules:
-- Every bullet is a fact, not a vague phrase
-- Use drug names, company names, numbers, dates
-- No bullet longer than 20 words
-- No paragraphs anywhere
+Be specific throughout: drug names, company names, percentages, trial names, dates. No vague phrases like "significant development" or "important milestone".
 """
 
 def generate_alert(article, rag_articles_ctx="", neo4j_ctx="", wiki_ctx="", price_info=None):
@@ -343,10 +333,24 @@ def dedup_key(a):
     key = drug if drug else co
     return f"{key}|{week}"
 
-# Sort best score first, then deduplicate by event key
+# Filter: must have a specific drug (basic science / no-drug articles are not competitive intel)
+def is_competitive_intel(a):
+    drug = (a.get("product_name") or "").strip()
+    company = (a.get("company") or "").strip()
+    # Must have a named drug OR a pharma company with score >= 6
+    if drug:
+        return True
+    if company and (a.get("relevance_score") or 0) >= 6:
+        return True
+    return False
+
+# Sort best score first, filter, then deduplicate by event key
 seen_events = set()
 selected = []
 for a in sorted(articles, key=lambda x: -(x.get("relevance_score") or 0)):
+    if not is_competitive_intel(a):
+        print(f"  [SKIP — no drug/company] {(a.get('catchy_title') or a.get('raw_title',''))[:65]}")
+        continue
     key = dedup_key(a)
     if key not in seen_events:
         selected.append(a)
