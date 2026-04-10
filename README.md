@@ -282,12 +282,12 @@ database/
   neo4j_setup.cypher        # Knowledge graph schema
 migrations/
   002_pgvector_wiki.sql     # pgvector + wiki_pages table + match_* RPC functions
-dashboard/
-  index.html                # Read-only web UI (articles, trials, feedback)
+index.html            # Dashboard UI (served as Vercel static root)
 api/
   articles.js               # Vercel serverless: fetch articles from Supabase
   feedback.js               # Vercel serverless: submit alert feedback
   trigger-alert.js          # Vercel serverless: manual alert trigger
+package.json          # Node.js runtime declaration (required for Vercel api/ detection)
 vercel.json           # Vercel deployment config
 output/
   results.json        # JSON backup after each news run
@@ -379,11 +379,12 @@ A lightweight read-only web dashboard is included for browsing articles, trial u
 
 | Path | Purpose |
 |------|---------|
-| `dashboard/index.html` | Single-page UI — lists scored articles, trial changes, and alert history |
+| `index.html` | Single-page UI — lists scored articles, trial changes, and alert history (served as Vercel static root) |
 | `api/articles.js` | Vercel serverless function — queries Supabase `articles` table and returns JSON |
 | `api/feedback.js` | Vercel serverless function — accepts thumbs-up/down feedback on alerts |
 | `api/trigger-alert.js` | Vercel serverless function — manually triggers an alert run |
-| `vercel.json` | Vercel routing config — maps `/api/*` to serverless functions |
+| `package.json` | Declares `node@18.x` runtime so Vercel detects `api/` as Node.js serverless functions |
+| `vercel.json` | Vercel config (currently `{}` — default routing handles `api/*` and static root) |
 
 ### Deploy to Vercel
 

@@ -1,5 +1,5 @@
 # Project Kanban — Pharma News Monitor
-**Last updated:** 2026-04-09 UTC
+**Last updated:** 2026-04-10 UTC
 
 ---
 
@@ -12,8 +12,8 @@
 | Fix `load_neo4j.py` intermittent failure | GitHub Actions run 24184780165 failed on "Load knowledge graph" step |
 | User feedback loop — thumbs up/down on alerts | Improve scoring over time |
 | Run `migrations/004_feedback_table.sql` in Supabase | Required for feedback thumbs-up/down feature |
-| Deploy to Vercel | Connect repo in Vercel dashboard + add 3 env vars: `SUPABASE_URL`, `SUPABASE_KEY`, `GROQ_KEY` |
-| Fix Groq rate limit in `email_alerts.py` | Switch to a lower-RPM model or reduce articles-per-run |
+| Verify Vercel dashboard API (`/api/articles`) returns data | `package.json` fix deployed (2026-04-10); awaiting confirmation that 404 is resolved |
+| Fix Groq rate limit in `send_comparison_alerts.py` | Retry+backoff added (2026-04-09) but rate limit still hits on large runs |
 | Fix `email_alerts.py` rich format | Rich/HTML formatting broken in latest version |
 | Re-enable trial email alerts | Trial alerts disabled pending v3 data-quality verification |
 
@@ -27,6 +27,16 @@
 
 ---
 
+## ✅ Done — Vercel Node.js detection fix + alert polish (2026-04-10)
+
+| Date | Task |
+|------|------|
+| 2026-04-10 | `package.json` added to repo root — Vercel now detects Node.js runtime for `api/` functions ✅ |
+| 2026-04-10 | `index.html` moved to repo root (Vercel static serving) ✅ |
+| 2026-04-10 | `vercel.json` simplified to `{}` (no custom routes needed after restructure) ✅ |
+
+---
+
 ## ✅ Done — Client Dashboard + Vercel + trials_monitor v3 rule-based diff (2026-04-09)
 
 | Date | Task |
@@ -37,6 +47,8 @@
 | 2026-04-09 | `api/trigger-alert.js` — Vercel serverless function: manual alert trigger ✅ |
 | 2026-04-09 | `vercel.json` — Vercel deployment config ✅ |
 | 2026-04-09 | `trials_monitor.py` v3 — rule-based diff (no LLM dependency for change detection) ✅ |
+| 2026-04-09 | Groq retry + 20s backoff added to `send_comparison_alerts.py` ✅ |
+| 2026-04-09 | Source highlighting — wiki `[W]` and Neo4j `[N]` tags inline in alert text ✅ |
 
 ---
 
@@ -114,11 +126,11 @@ Press release websites (Jina.ai × 15) + Google News RSS + FDA/EMA
   → email_alerts.py     [full context: RAG + wiki + Neo4j → Groq → Gmail]
 ```
 
-## Database Stats (as of 2026-04-09)
+## Database Stats (as of 2026-04-10)
 
 | Table | Row count |
 |-------|-----------|
-| articles | 23 (content-range reports 23 as of 2026-04-09) |
+| articles | 23 |
 | wiki_pages | 43 |
 | clinical_trials | 0 (v3 rebuild in progress) |
 
