@@ -4,7 +4,7 @@ Automated competitive intelligence platform for **Rheumatoid Arthritis, Plaque P
 
 Runs entirely **free** on GitHub Actions + Supabase + Groq + Jina AI.
 
-→ **[Project Kanban Board](KANBAN.md)**
+→ **[Live Dashboard](https://news-monitor-rho.vercel.app)** · **[Project Kanban Board](KANBAN.md)**
 
 ---
 
@@ -383,7 +383,7 @@ A lightweight read-only web dashboard is included for browsing articles, trial u
 | `api/articles.js` | Vercel serverless function — queries Supabase `articles` table and returns JSON |
 | `api/feedback.js` | Vercel serverless function — accepts thumbs-up/down feedback on alerts |
 | `api/trigger-alert.js` | Vercel serverless function — manually triggers an alert run |
-| `package.json` | Declares `node@18.x` runtime so Vercel detects `api/` as Node.js serverless functions |
+| `package.json` | Declares `node@20.x` runtime so Vercel detects `api/` as Node.js serverless functions |
 | `vercel.json` | Vercel config (currently `{}` — default routing handles `api/*` and static root) |
 
 ### Deploy to Vercel
@@ -393,7 +393,7 @@ A lightweight read-only web dashboard is included for browsing articles, trial u
 
 | Variable | Value |
 |----------|-------|
-| `SUPABASE_URL` | Your Supabase project URL (e.g. `https://ijunshkmqdqhdeivcjze.supabase.co`) |
+| `SUPABASE_URL` | Your Supabase **project API URL** — e.g. `https://ijunshkmqdqhdeivcjze.supabase.co`. **Do NOT use `https://supabase.com`** — that is the website, not your project endpoint. Find it in: Supabase dashboard → Settings → API → Project URL. |
 | `SUPABASE_KEY` | Supabase service role key |
 | `GROQ_KEY` | Groq API key (used by `trigger-alert.js`) |
 

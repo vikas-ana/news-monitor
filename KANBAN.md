@@ -11,8 +11,7 @@
 | Set `ANTHROPIC_KEY` GitHub secret | For Claude Haiku fallback if Groq rate-limited |
 | Fix `load_neo4j.py` intermittent failure | GitHub Actions run 24184780165 failed on "Load knowledge graph" step |
 | User feedback loop — thumbs up/down on alerts | Improve scoring over time |
-| Run `migrations/004_feedback_table.sql` in Supabase | Required for feedback thumbs-up/down feature |
-| Verify Vercel dashboard API (`/api/articles`) returns data | `package.json` fix deployed (2026-04-10); awaiting confirmation that 404 is resolved |
+| Run `migrations/004_feedback_table.sql` in Supabase SQL editor | **Feedback buttons will fail until this is done** — creates the feedback table required by `api/feedback.js` |
 | Fix Groq rate limit in `send_comparison_alerts.py` | Retry+backoff added (2026-04-09) but rate limit still hits on large runs |
 | Fix `email_alerts.py` rich format | Rich/HTML formatting broken in latest version |
 | Re-enable trial email alerts | Trial alerts disabled pending v3 data-quality verification |
@@ -27,10 +26,14 @@
 
 ---
 
-## ✅ Done — Vercel Node.js detection fix + alert polish (2026-04-10)
+## ✅ Done — Vercel dashboard live + env var + Node.js fixes (2026-04-10)
 
 | Date | Task |
 |------|------|
+| 2026-04-10 | **Vercel dashboard live** at [news-monitor-rho.vercel.app](https://news-monitor-rho.vercel.app) — 23 articles loading correctly ✅ |
+| 2026-04-10 | Fixed Node.js version: bumped `package.json` from `18.x` → `20.x` (Vercel serverless runtime) ✅ |
+| 2026-04-10 | Fixed `SUPABASE_URL` env var — was pointing to `supabase.com` website; corrected to project API URL (`https://ijunshkmqdqhdeivcjze.supabase.co`) ✅ |
+| 2026-04-10 | Removed `filter_reason` from Supabase `select` query — column does not exist in schema; was causing API 400 errors ✅ |
 | 2026-04-10 | `package.json` added to repo root — Vercel now detects Node.js runtime for `api/` functions ✅ |
 | 2026-04-10 | `index.html` moved to repo root (Vercel static serving) ✅ |
 | 2026-04-10 | `vercel.json` simplified to `{}` (no custom routes needed after restructure) ✅ |
@@ -130,7 +133,7 @@ Press release websites (Jina.ai × 15) + Google News RSS + FDA/EMA
 
 | Table | Row count |
 |-------|-----------|
-| articles | 23 |
+| articles | 23 (as of 2026-04-10) |
 | wiki_pages | 43 |
 | clinical_trials | 0 (v3 rebuild in progress) |
 
