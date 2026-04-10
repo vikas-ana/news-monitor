@@ -282,6 +282,13 @@ database/
   neo4j_setup.cypher        # Knowledge graph schema
 migrations/
   002_pgvector_wiki.sql     # pgvector + wiki_pages table + match_* RPC functions
+dashboard/
+  index.html                # Read-only web UI (articles, trials, feedback)
+api/
+  articles.js               # Vercel serverless: fetch articles from Supabase
+  feedback.js               # Vercel serverless: submit alert feedback
+  trigger-alert.js          # Vercel serverless: manual alert trigger
+vercel.json           # Vercel deployment config
 output/
   results.json        # JSON backup after each news run
 decisions/
@@ -361,3 +368,34 @@ SUPABASE_KEY=your_key NEO4J_URI=... NEO4J_USER=... NEO4J_PASS=... python src/loa
 ```
 
 After setup, the workflow runs automatically 3× daily. Wiki pages are updated after each run.
+
+---
+
+## Dashboard (Vercel)
+
+A lightweight read-only web dashboard is included for browsing articles, trial updates, and submitting feedback.
+
+### Files
+
+| Path | Purpose |
+|------|---------|
+| `dashboard/index.html` | Single-page UI — lists scored articles, trial changes, and alert history |
+| `api/articles.js` | Vercel serverless function — queries Supabase `articles` table and returns JSON |
+| `api/feedback.js` | Vercel serverless function — accepts thumbs-up/down feedback on alerts |
+| `api/trigger-alert.js` | Vercel serverless function — manually triggers an alert run |
+| `vercel.json` | Vercel routing config — maps `/api/*` to serverless functions |
+
+### Deploy to Vercel
+
+1. Go to [vercel.com](https://vercel.com) → **Add New Project** → import `vikas-ana/news-monitor`
+2. Set the following **Environment Variables** in the Vercel dashboard:
+
+| Variable | Value |
+|----------|-------|
+| `SUPABASE_URL` | Your Supabase project URL (e.g. `https://ijunshkmqdqhdeivcjze.supabase.co`) |
+| `SUPABASE_KEY` | Supabase service role key |
+| `GROQ_KEY` | Groq API key (used by `trigger-alert.js`) |
+
+3. Deploy. The dashboard will be live at `https://<your-project>.vercel.app`.
+
+> **Pending:** Run `migrations/004_feedback_table.sql` in the Supabase SQL editor before using the feedback feature.

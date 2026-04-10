@@ -8,11 +8,14 @@
 | Task | Notes |
 |------|-------|
 | Load drug profiles + SWOT CSV into Neo4j | Needed for full COMPETES_WITH + SWOT context in alerts |
-| Email alerts for clinical trial changes (`--source trials`) | Trial alerts disabled pending v3 data-quality verification |
 | Set `ANTHROPIC_KEY` GitHub secret | For Claude Haiku fallback if Groq rate-limited |
 | Fix `load_neo4j.py` intermittent failure | GitHub Actions run 24184780165 failed on "Load knowledge graph" step |
-| Web dashboard — read-only UI to browse articles + trials | Nice-to-have |
 | User feedback loop — thumbs up/down on alerts | Improve scoring over time |
+| Run `migrations/004_feedback_table.sql` in Supabase | Required for feedback thumbs-up/down feature |
+| Deploy to Vercel | Connect repo in Vercel dashboard + add 3 env vars: `SUPABASE_URL`, `SUPABASE_KEY`, `GROQ_KEY` |
+| Fix Groq rate limit in `email_alerts.py` | Switch to a lower-RPM model or reduce articles-per-run |
+| Fix `email_alerts.py` rich format | Rich/HTML formatting broken in latest version |
+| Re-enable trial email alerts | Trial alerts disabled pending v3 data-quality verification |
 
 ---
 
@@ -20,7 +23,20 @@
 
 | Task | Notes |
 |------|-------|
-| Trials monitor v3 — stabilise and re-enable alerts | v3 rewritten (today-only, version-diff, LLM-judged, no history API fallback); trial alerts disabled until verified |
+| (none) | |
+
+---
+
+## ✅ Done — Client Dashboard + Vercel + trials_monitor v3 rule-based diff (2026-04-09)
+
+| Date | Task |
+|------|------|
+| 2026-04-09 | `dashboard/index.html` — read-only UI to browse articles + trials ✅ |
+| 2026-04-09 | `api/articles.js` — Vercel serverless function: fetch articles from Supabase ✅ |
+| 2026-04-09 | `api/feedback.js` — Vercel serverless function: submit thumbs-up/down feedback ✅ |
+| 2026-04-09 | `api/trigger-alert.js` — Vercel serverless function: manual alert trigger ✅ |
+| 2026-04-09 | `vercel.json` — Vercel deployment config ✅ |
+| 2026-04-09 | `trials_monitor.py` v3 — rule-based diff (no LLM dependency for change detection) ✅ |
 
 ---
 
@@ -102,7 +118,7 @@ Press release websites (Jina.ai × 15) + Google News RSS + FDA/EMA
 
 | Table | Row count |
 |-------|-----------|
-| articles | 23 |
+| articles | 23 (content-range reports 23 as of 2026-04-09) |
 | wiki_pages | 43 |
 | clinical_trials | 0 (v3 rebuild in progress) |
 
