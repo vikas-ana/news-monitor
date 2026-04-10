@@ -1,6 +1,6 @@
 {
-  "outputDirectory": "dashboard",
-  "rewrites": [
-    { "source": "/api/:path*", "destination": "/api/:path*" }
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "src": "/(.*)", "dest": "/dashboard/$1" }
   ]
 }
