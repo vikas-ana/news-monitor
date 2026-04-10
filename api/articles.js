@@ -7,7 +7,7 @@ module.exports = async function handler(req, res) {
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
-  const cols = 'id,catchy_title,raw_title,product_name,company,indication,category,relevance_score,summary,alert_text,article_date,url,is_alert,filter_reason';
+  const cols = 'id,catchy_title,raw_title,product_name,company,indication,category,relevance_score,summary,alert_text,article_date,url,is_alert';
   let params = `select=${cols}&order=article_date.desc,relevance_score.desc&relevance_score=gte.4`;
 
   if (category)  params += `&category=eq.${encodeURIComponent(category)}`;
