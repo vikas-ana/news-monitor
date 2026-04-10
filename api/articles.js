@@ -27,7 +27,10 @@ module.exports = async function handler(req, res) {
     },
   });
 
-  if (!r.ok) return res.status(r.status).json({ error: 'Supabase error' });
+  if (!r.ok) {
+    const errText = await r.text();
+    return res.status(r.status).json({ error: 'Supabase error', status: r.status, detail: errText, url_used: url.replace(SUPABASE_KEY, '***') });
+  }
 
   const data = await r.json();
   const contentRange = r.headers.get('content-range') || '';
