@@ -1,5 +1,5 @@
 # Project Kanban — Pharma News Monitor
-**Last updated:** 2026-04-11 UTC
+**Last updated:** 2026-04-12 UTC
 
 ---
 
@@ -129,11 +129,11 @@ Press release websites (Jina.ai × 15) + Google News RSS + FDA/EMA
   → email_alerts.py     [full context: RAG + wiki + Neo4j → Groq → Gmail]
 ```
 
-## Database Stats (as of 2026-04-11)
+## Database Stats (as of 2026-04-12)
 
 | Table | Row count |
 |-------|-----------|
-| articles | 23 (as of 2026-04-11) |
+| articles | 33 (as of 2026-04-12) |
 | wiki_pages | 43 |
 | clinical_trials | 0 (v3 rebuild in progress) |
 
