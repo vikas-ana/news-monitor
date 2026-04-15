@@ -1,5 +1,5 @@
 # Project Kanban — Pharma News Monitor
-**Last updated:** 2026-04-13 UTC
+**Last updated:** 2026-04-15 UTC
 
 ---
 
@@ -133,7 +133,7 @@ Press release websites (Jina.ai × 15) + Google News RSS + FDA/EMA
 
 | Table | Row count |
 |-------|-----------|
-| articles | 36 (as of 2026-04-13) |
+| articles | 61 (as of 2026-04-15) |
 | wiki_pages | 43 |
 | clinical_trials | 0 (v3 rebuild in progress) |
 
